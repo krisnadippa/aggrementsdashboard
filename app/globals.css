@@ -1732,4 +1732,10 @@ body.sidebar-collapsed .sidebar-logout {
   color: inherit;
 }
 
-
+/* Helper to hide sidebar on customer screens */
+body.hide-sidebar-layout .sidebar {
+  display: none !important;
+}
+body.hide-sidebar-layout .main-content {
+  margin-left: 0 !important;
+}

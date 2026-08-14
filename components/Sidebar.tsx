@@ -59,6 +59,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { href: '/', label: 'Dashboard', icon: <Icons.Dashboard /> },
+    { href: '/dashboard2', label: 'Dashboard 2', icon: <Icons.Dashboard /> },
     { href: '/history', label: 'Rental', icon: <Icons.Rentals /> },
   ];
 
