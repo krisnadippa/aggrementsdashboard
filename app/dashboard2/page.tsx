@@ -6,6 +6,7 @@ import { RentalFormData } from '@/types';
 import { cleanupExpired, saveTransaction, getTransactions } from '@/lib/localStorage';
 import InvoiceForm2 from '@/components/InvoiceForm2';
 import ThemeToggle from '@/components/ThemeToggle';
+import { decodeShortData } from '@/lib/urlData';
 
 export default function Dashboard2Page() {
   const [txnCount, setTxnCount] = useState(0);
@@ -18,10 +19,21 @@ export default function Dashboard2Page() {
     cleanupExpired();
     setTxnCount(getTransactions().length);
 
-    // Check if URL has ?ref= param from customer WhatsApp return link
+    // Check if URL has ?data= or ?ref= param from customer WhatsApp return link
     const params = new URLSearchParams(window.location.search);
+    const dataParam = params.get('data');
     const ref = params.get('ref');
-    if (ref) {
+
+    if (dataParam) {
+      const decoded = decodeShortData(dataParam);
+      if (decoded) {
+        setPrefillData(decoded);
+        // Clean URL to avoid re-fetching or reloading data on refresh
+        window.history.replaceState({}, '', '/dashboard2');
+      } else {
+        setRefError('Tautan data tidak valid atau rusak.');
+      }
+    } else if (ref) {
       setRefLoading(true);
       fetch(`/api/sign-data?id=${encodeURIComponent(ref)}`)
         .then(async (res) => {

@@ -6,6 +6,7 @@ import { DEFAULT_CHECKLIST } from '@/data/vehicles';
 import VehicleConditionDiagram from './VehicleConditionDiagram';
 import FuelIndicator from './FuelIndicator';
 import SignaturePad from './SignaturePad';
+import { encodeShortData, decodeShortData } from '@/lib/urlData';
 
 interface InvoiceFormProps {
   onSubmit: (data: RentalFormData) => void;
@@ -30,67 +31,7 @@ function parseNumberFromDots(str: string): number {
   return isNaN(num) ? 0 : num;
 }
 
-// Encode JSON to base64 securely (EXCLUDING SIGNATURES to keep it short!)
-function encodeShortData(form: RentalFormData): string {
-  try {
-    const shortPayload = {
-      renterName: form.renterName,
-      idType: form.idType,
-      idNumber: form.idNumber,
-      phone: form.phone,
-      email: form.email,
-      address: form.address,
-      vehicleName: form.vehicleName,
-      policeNumber: form.policeNumber,
-      dailyRate: form.dailyRate,
-      startDate: form.startDate,
-      startTime: form.startTime,
-      flightArrival: form.flightArrival,
-      endDate: form.endDate,
-      endTime: form.endTime,
-      flightDeparture: form.flightDeparture,
-      vehicleType: form.vehicleType,
-      fuelLevel: form.fuelLevel,
-      checklist: form.checklist.map(c => ({ id: c.id, checked: c.checked })),
-      damageMarkers: form.damageMarkers
-    };
-    const json = JSON.stringify(shortPayload);
-    return btoa(encodeURIComponent(json));
-  } catch (e) {
-    console.error('Failed to encode:', e);
-    return '';
-  }
-}
-
-function decodeShortData(str: string): any {
-  try {
-    const parsed = JSON.parse(decodeURIComponent(atob(str)));
-    // Hydrate full checklist labels from default
-    const fullChecklist = DEFAULT_CHECKLIST.map(item => {
-      const match = parsed.checklist?.find((c: any) => c.id === item.id);
-      return {
-        ...item,
-        checked: match ? match.checked : false
-      };
-    });
-    return {
-      ...parsed,
-      dailyRate: Number(parsed.dailyRate) || 0,
-      additionalCharge: Number(parsed.additionalCharge) || 0,
-      discount: Number(parsed.discount) || 0,
-      deposit: Number(parsed.deposit) || 0,
-      amountPaidNow: Number(parsed.amountPaidNow) || 0,
-      fuelLevel: Number(parsed.fuelLevel) || 75,
-      checklist: fullChecklist,
-      damageMarkers: parsed.damageMarkers || [],
-      signatureRental: parsed.signatureRental || '',
-      signatureRenter: parsed.signatureRenter || '',
-    };
-  } catch (e) {
-    console.error('Failed to decode:', e);
-    return null;
-  }
-}
+// encodeShortData and decodeShortData are now imported from '@/lib/urlData'
 
 function calcDuration(startDate: string, startTime: string, endDate: string, endTime: string) {
   if (!startDate || !startTime || !endDate || !endTime) return { days: 0, hours: 0 };
@@ -664,25 +605,11 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 if (!form.startDate || !form.endDate) { alert('Tanggal sewa wajib diisi.'); return; }
                 if (!form.phone) { alert('Nomor telepon WhatsApp penyewa wajib diisi untuk membagikan link.'); return; }
 
-                // Save FULL form data (semua data finansial) ke server API
-                // Hanya tanda tangan penyewa yang dikosongkan (belum ada)
+                // Save FULL form data directly encoded in the URL (excluding renter signature which is empty)
                 const payload = { ...form, signatureRenter: '' };
-
-                let shareUrl = '';
-                try {
-                  const res = await fetch('/api/sign-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                  });
-                  if (!res.ok) throw new Error('server error');
-                  const { id } = await res.json();
-                  const host = window.location.origin;
-                  shareUrl = `${host}/customer-sign?ref=${id}`;
-                } catch {
-                  alert('Gagal menyimpan data ke server. Pastikan aplikasi berjalan dan coba lagi.');
-                  return;
-                }
+                const encodedData = encodeShortData(payload);
+                const host = window.location.origin;
+                const shareUrl = `${host}/customer-sign?data=${encodedData}`;
 
                 // Clean phone number for WhatsApp
                 let cleanPhone = form.phone.replace(/\D/g, '');

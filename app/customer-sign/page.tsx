@@ -6,74 +6,11 @@ import { DEFAULT_CHECKLIST } from '@/data/vehicles';
 import VehicleConditionDiagram from '@/components/VehicleConditionDiagram';
 import FuelIndicator from '@/components/FuelIndicator';
 import SignaturePad from '@/components/SignaturePad';
+import { encodeShortData, decodeShortData } from '@/lib/urlData';
 
 function formatCurrency(value: number): string {
   if (!value || isNaN(value)) return 'Rp 0';
   return 'Rp ' + Math.round(value).toLocaleString('id-ID');
-}
-
-function decodeShortData(str: string): any {
-  try {
-    const parsed = JSON.parse(decodeURIComponent(atob(str)));
-    // Hydrate full checklist labels from default
-    const fullChecklist = DEFAULT_CHECKLIST.map(item => {
-      const match = parsed.checklist?.find((c: any) => c.id === item.id);
-      return {
-        ...item,
-        checked: match ? match.checked : false
-      };
-    });
-    return {
-      ...parsed,
-      dailyRate: Number(parsed.dailyRate) || 0,
-      additionalCharge: Number(parsed.additionalCharge) || 0,
-      discount: Number(parsed.discount) || 0,
-      deposit: Number(parsed.deposit) || 0,
-      amountPaidNow: Number(parsed.amountPaidNow) || 0,
-      fuelLevel: Number(parsed.fuelLevel) || 75,
-      checklist: fullChecklist,
-      damageMarkers: parsed.damageMarkers || [],
-      signatureRental: parsed.signatureRental || '',
-      signatureRenter: parsed.signatureRenter || '',
-    };
-  } catch (e) {
-    console.error('Failed to decode:', e);
-    return null;
-  }
-}
-
-// Encode data back with customer signatures in JPEG format
-function encodeShortData(form: RentalFormData): string {
-  try {
-    const shortPayload = {
-      renterName: form.renterName,
-      idType: form.idType,
-      idNumber: form.idNumber,
-      phone: form.phone,
-      email: form.email,
-      address: form.address,
-      vehicleName: form.vehicleName,
-      policeNumber: form.policeNumber,
-      dailyRate: form.dailyRate,
-      startDate: form.startDate,
-      startTime: form.startTime,
-      flightArrival: form.flightArrival,
-      endDate: form.endDate,
-      endTime: form.endTime,
-      flightDeparture: form.flightDeparture,
-      vehicleType: form.vehicleType,
-      fuelLevel: form.fuelLevel,
-      checklist: form.checklist.map(c => ({ id: c.id, checked: c.checked })),
-      damageMarkers: form.damageMarkers,
-      signatureRental: form.signatureRental,
-      signatureRenter: form.signatureRenter // now filled with compressed jpeg
-    };
-    const json = JSON.stringify(shortPayload);
-    return btoa(encodeURIComponent(json));
-  } catch (e) {
-    console.error('Failed to encode:', e);
-    return '';
-  }
 }
 
 export default function CustomerSignPage() {
@@ -177,20 +114,14 @@ export default function CustomerSignPage() {
 
     setIsSaving(true);
     try {
-      const res = await fetch('/api/sign-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error('Server error');
-      const { id } = await res.json();
+      const encoded = encodeShortData(form);
       const host = window.location.origin;
-      const adminLink = `${host}/dashboard2?ref=${id}`;
-      setShortId(id);
+      const adminLink = `${host}/dashboard2?data=${encoded}`;
+      setShortId('SIGNED');
       setReturnUrl(adminLink);
       setIsSubmitted(true);
     } catch (err) {
-      alert('Gagal mengirim data. Pastikan koneksi aktif dan coba lagi.');
+      alert('Gagal memproses data. Silakan coba lagi.');
       console.error(err);
     } finally {
       setIsSaving(false);
@@ -252,7 +183,7 @@ export default function CustomerSignPage() {
         <div style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1.5rem', width: '100%', maxWidth: '400px', textAlign: 'left' }}>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 700 }}>Tautan Dokumen Signed:</p>
           <p style={{ fontSize: '0.8125rem', color: 'var(--accent)', fontFamily: 'monospace', wordBreak: 'break-all', fontWeight: 600 }}>{returnUrl}</p>
-          <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginTop: '0.375rem' }}>ID: <strong>{shortId}</strong> &nbsp;·&nbsp; Berlaku 24 jam</p>
+          <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginTop: '0.375rem' }}>ID: <strong>{shortId}</strong> &nbsp;·&nbsp; Status: Signed &amp; Aman</p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '400px' }}>
