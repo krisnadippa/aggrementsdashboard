@@ -114,15 +114,27 @@ export default function CustomerSignPage() {
 
     setIsSaving(true);
     try {
+      const res = await fetch('/api/sign-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error('API save failed');
+      const { id } = await res.json();
+      const host = window.location.origin;
+      const adminLink = `${host}/dashboard2?ref=${id}`;
+      setShortId(id);
+      setReturnUrl(adminLink);
+      setIsSubmitted(true);
+    } catch (err) {
+      console.warn('API save failed, falling back to URL encoding:', err);
+      // Fallback: use URL-encoded data
       const encoded = encodeShortData(form);
       const host = window.location.origin;
       const adminLink = `${host}/dashboard2?data=${encoded}`;
       setShortId('SIGNED');
       setReturnUrl(adminLink);
       setIsSubmitted(true);
-    } catch (err) {
-      alert('Gagal memproses data. Silakan coba lagi.');
-      console.error(err);
     } finally {
       setIsSaving(false);
     }
@@ -183,7 +195,7 @@ export default function CustomerSignPage() {
         <div style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1.5rem', width: '100%', maxWidth: '400px', textAlign: 'left' }}>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 700 }}>Tautan Dokumen Signed:</p>
           <p style={{ fontSize: '0.8125rem', color: 'var(--accent)', fontFamily: 'monospace', wordBreak: 'break-all', fontWeight: 600 }}>{returnUrl}</p>
-          <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginTop: '0.375rem' }}>ID: <strong>{shortId}</strong> &nbsp;·&nbsp; Status: Signed &amp; Aman</p>
+          <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', marginTop: '0.375rem' }}>ID: <strong>{shortId}</strong> &nbsp;·&nbsp; {shortId === 'SIGNED' ? 'Status: Signed &amp; Aman' : 'Berlaku 24 jam'}</p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '400px' }}>

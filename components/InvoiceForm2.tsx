@@ -605,11 +605,26 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 if (!form.startDate || !form.endDate) { alert('Tanggal sewa wajib diisi.'); return; }
                 if (!form.phone) { alert('Nomor telepon WhatsApp penyewa wajib diisi untuk membagikan link.'); return; }
 
-                // Save FULL form data directly encoded in the URL (excluding renter signature which is empty)
+                // Save FULL form data directly (excluding renter signature which is empty)
                 const payload = { ...form, signatureRenter: '' };
-                const encodedData = encodeShortData(payload);
                 const host = window.location.origin;
-                const shareUrl = `${host}/customer-sign?data=${encodedData}`;
+                let shareUrl = '';
+
+                try {
+                  const res = await fetch('/api/sign-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                  if (!res.ok) throw new Error('API save failed');
+                  const { id } = await res.json();
+                  shareUrl = `${host}/customer-sign?ref=${id}`;
+                } catch (err) {
+                  console.warn('API save failed, falling back to URL encoding:', err);
+                  // Fallback: use URL-encoded data
+                  const encodedData = encodeShortData(payload);
+                  shareUrl = `${host}/customer-sign?data=${encodedData}`;
+                }
 
                 // Clean phone number for WhatsApp
                 let cleanPhone = form.phone.replace(/\D/g, '');

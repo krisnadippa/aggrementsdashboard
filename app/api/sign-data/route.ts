@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
+import { sql, initDb } from '@/lib/db';
 
-// Use a temp directory that persists during dev server lifetime
-const DATA_DIR = join(tmpdir(), 'infinitycar_sign_data');
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function ensureDir() {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
 
 function generateId(): string {
   // Generate short 8-character alphanumeric ID
@@ -23,30 +13,40 @@ function generateId(): string {
   return id;
 }
 
-// POST /api/sign-data  — save signed form data, return short ID
+// POST /api/sign-data  — save signed form data to Postgres, return short ID
 export async function POST(req: NextRequest) {
   try {
-    ensureDir();
+    if (!sql) {
+      return NextResponse.json({ error: 'DATABASE_URL is not configured in env' }, { status: 500 });
+    }
+
+    // Auto-create table if not exists
+    await initDb();
+
     const body = await req.json();
     
     let id = generateId();
-    let filePath = join(DATA_DIR, `${id}.json`);
-    // Ensure no collision
+    let collision = true;
     let tries = 0;
-    while (existsSync(filePath) && tries < 10) {
-      id = generateId();
-      filePath = join(DATA_DIR, `${id}.json`);
-      tries++;
+
+    // Ensure no ID collision in db (using tagged template literal)
+    while (collision && tries < 10) {
+      const existing = await sql`SELECT id FROM rental_contracts WHERE id = ${id}`;
+      if (existing.length === 0) {
+        collision = false;
+      } else {
+        id = generateId();
+        tries++;
+      }
     }
 
-    const record = {
-      id,
-      data: body,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + MAX_AGE_MS,
-    };
+    const expiresAt = new Date(Date.now() + MAX_AGE_MS).toISOString();
 
-    writeFileSync(filePath, JSON.stringify(record), 'utf-8');
+    // Insert into DB using tagged template literals
+    await sql`
+      INSERT INTO rental_contracts (id, data, expires_at) 
+      VALUES (${id}, ${body}, ${expiresAt})
+    `;
 
     return NextResponse.json({ id }, { status: 200 });
   } catch (err) {
@@ -55,28 +55,37 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/sign-data?id=xxxx — retrieve saved form data by ID
+// GET /api/sign-data?id=xxxx — retrieve saved form data by ID from Postgres
 export async function GET(req: NextRequest) {
   try {
-    ensureDir();
+    if (!sql) {
+      return NextResponse.json({ error: 'DATABASE_URL is not configured in env' }, { status: 500 });
+    }
+
     const id = req.nextUrl.searchParams.get('id');
     if (!id || !/^[a-z0-9]{6,16}$/.test(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
     }
 
-    const filePath = join(DATA_DIR, `${id}.json`);
-    if (!existsSync(filePath)) {
-      return NextResponse.json({ error: 'Data not found or expired' }, { status: 404 });
+    // Fetch using tagged template literals
+    const rows = await sql`SELECT data, expires_at FROM rental_contracts WHERE id = ${id}`;
+    if (rows.length === 0) {
+      return NextResponse.json({ error: 'Data not found' }, { status: 404 });
     }
 
-    const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const record = rows[0];
+    const now = new Date();
+    const expiresAt = record.expires_at ? new Date(record.expires_at as string) : null;
 
     // Check expiry
-    if (raw.expiresAt && Date.now() > raw.expiresAt) {
+    if (expiresAt && now > expiresAt) {
       return NextResponse.json({ error: 'Link telah kedaluwarsa (24 jam)' }, { status: 410 });
     }
 
-    return NextResponse.json({ data: raw.data }, { status: 200 });
+    // Neon's client automatically parses JSONB columns, but let's be safe
+    const data = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
+
+    return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     console.error('[sign-data GET]', err);
     return NextResponse.json({ error: 'Failed to retrieve data' }, { status: 500 });
