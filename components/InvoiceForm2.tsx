@@ -7,6 +7,8 @@ import VehicleConditionDiagram from './VehicleConditionDiagram';
 import FuelIndicator from './FuelIndicator';
 import SignaturePad from './SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
+import { saveTransaction } from '@/lib/localStorage';
+import { useRouter } from 'next/navigation';
 
 interface InvoiceFormProps {
   onSubmit: (data: RentalFormData) => void;
@@ -123,6 +125,7 @@ const SectionIcons = {
 };
 
 export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps) {
+  const router = useRouter();
   const [form, setForm] = useState<RentalFormData>(emptyForm());
   const [today, setToday] = useState<string>('');
 
@@ -638,7 +641,14 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 const waText = encodeURIComponent(`Halo *${form.renterName}*,\n\nBerikut adalah tautan dokumen perjanjian sewa untuk kendaraan *${form.vehicleName}* dengan plat nomor *${form.policeNumber}*.\n\nSilakan klik tautan di bawah ini untuk memeriksa checklist kelengkapan dan menandatangani dokumen langsung dari HP Anda:\n\n${shareUrl}\n\nTerima kasih!`);
                 const waUrl = `https://wa.me/${cleanPhone}?text=${waText}`;
 
+                // Open WhatsApp sharing link in new tab
                 window.open(waUrl, '_blank');
+                 
+                // Save the invoice transaction to local browser history
+                saveTransaction(form);
+                 
+                // Redirect admin directly to the list/history page
+                router.push('/history');
               }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
