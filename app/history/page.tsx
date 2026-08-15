@@ -12,10 +12,31 @@ export default function HistoryPage() {
   const [loaded, setLoaded] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TransactionRecord | null>(null);
 
+  // Realtime active links from database (Neon DB)
+  const [dbContracts, setDbContracts] = useState<any[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  const fetchDbContracts = () => {
+    setDbLoading(true);
+    fetch('/api/sign-data')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch');
+        return res.json();
+      })
+      .then(({ list }) => {
+        setDbContracts(list || []);
+      })
+      .catch((err) => {
+        console.error('Error fetching database contracts:', err);
+      })
+      .finally(() => setDbLoading(false));
+  };
+
   useEffect(() => {
     cleanupExpired();
     setRecords(getTransactions().sort((a, b) => b.createdAt - a.createdAt));
     setLoaded(true);
+    fetchDbContracts();
   }, []);
 
   const handleDeleteRequest = (id: string) => {
@@ -30,6 +51,23 @@ export default function HistoryPage() {
       deleteTransaction(deleteTarget.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
       setDeleteTarget(null);
+    }
+  };
+
+  const deleteDbContract = async (id: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus tautan ini?')) return;
+    try {
+      const res = await fetch(`/api/sign-data?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setDbContracts((prev) => prev.filter((item) => item.id !== id));
+      } else {
+        alert('Gagal menghapus data.');
+      }
+    } catch (err) {
+      console.error('Error deleting contract:', err);
+      alert('Terjadi kesalahan koneksi.');
     }
   };
 
@@ -73,6 +111,128 @@ export default function HistoryPage() {
               <span>Data riwayat ini hanya tersimpan di browser Anda dan <strong>otomatis terhapus setelah 24 jam</strong> sejak dibuat. Untuk penyimpanan permanen, simpan PDF atau cetak invoice.</span>
             </div>
           )}
+        </div>
+
+        {loaded && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-primary)' }}>Status Tanda Tangan Customer (Realtime - Neon DB)</h2>
+              <button 
+                type="button" 
+                className="btn btn-outline" 
+                onClick={fetchDbContracts}
+                style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem', height: 'auto' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={dbLoading ? 'animate-spin' : ''}>
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                </svg>
+                Segarkan
+              </button>
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '1.25rem' }}>
+              Daftar tautan tanda tangan mandiri yang dikirim ke customer. Status ttd ter-update secara otomatis jika customer menandatangani dari HP mereka.
+            </p>
+
+            {dbLoading && dbContracts.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                Memuat data realtime dari database...
+              </div>
+            ) : dbContracts.length === 0 ? (
+              <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-secondary)', fontSize: '0.875rem', background: 'var(--bg-card)' }}>
+                Tidak ada tautan tanda tangan aktif di database.
+              </div>
+            ) : (
+              <div className="table-responsive-custom" style={{ overflowX: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-hover)' }}>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nama Penyewa</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Mobil / Plat</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Dibuat Pada</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Status TTD</th>
+                      <th style={{ padding: '0.75rem 1rem', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', textAlign: 'right' }}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbContracts.map((item) => {
+                      const createdDate = new Date(item.createdAt).toLocaleString('id-ID', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                      });
+                      const customerLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/customer-sign?ref=${item.id}`;
+                      const adminOpenLink = `/dashboard2?ref=${item.id}`;
+                      
+                      return (
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{item.renterName}</td>
+                          <td style={{ padding: '0.85rem 1rem', color: 'var(--text-primary)' }}>
+                            <div style={{ fontWeight: 600 }}>{item.vehicleName}</div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{item.policeNumber}</span>
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>{createdDate}</td>
+                          <td style={{ padding: '0.85rem 1rem' }}>
+                            {item.isSigned ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: 'var(--success-muted)', color: 'var(--success)', padding: '0.25rem 0.625rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                <span style={{ width: '6px', height: '6px', background: 'var(--success)', borderRadius: '50%' }}></span>
+                                Sudah Ditandatangani
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', background: 'var(--warning-muted)', color: 'var(--warning)', padding: '0.25rem 0.625rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                <span style={{ width: '6px', height: '6px', background: 'var(--warning)', borderRadius: '50%' }}></span>
+                                Belum Ditandatangani
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="btn btn-outline"
+                                title="Salin Link Customer"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(customerLink).then(() => {
+                                    alert('Tautan customer berhasil disalin!');
+                                  });
+                                }}
+                                style={{ padding: '0.35rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', minWidth: 'auto' }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                </svg>
+                              </button>
+                              <Link
+                                href={adminOpenLink}
+                                className="btn btn-primary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', textDecoration: 'none', height: '32px', lineHeight: '32px' }}
+                              >
+                                {item.isSigned ? "Proses Invoice" : "Tinjau"}
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => deleteDbContract(item.id)}
+                                className="btn btn-outline"
+                                title="Hapus"
+                                style={{ padding: '0.35rem', borderColor: 'var(--danger)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', minWidth: 'auto' }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginTop: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--text-primary)' }}>Invoice Final (LocalStorage Browser)</h2>
         </div>
 
         {!loaded ? (

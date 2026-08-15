@@ -7,6 +7,7 @@ import VehicleConditionDiagram from '@/components/VehicleConditionDiagram';
 import FuelIndicator from '@/components/FuelIndicator';
 import SignaturePad from '@/components/SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
+import { COMPANY_INFO } from '@/data/terms';
 
 function formatCurrency(value: number): string {
   if (!value || isNaN(value)) return 'Rp 0';
@@ -18,6 +19,7 @@ export default function CustomerSignPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [refId, setRefId] = useState<string | null>(null);
   const [returnUrl, setReturnUrl] = useState('');
   const [shortId, setShortId] = useState('');
 
@@ -32,6 +34,7 @@ export default function CustomerSignPage() {
       const dataParam = params.get('data');
 
       if (refParam) {
+        setRefId(refParam);
         // New method: fetch from server API using short ID
         fetch(`/api/sign-data?id=${encodeURIComponent(refParam)}`)
           .then(async (res) => {
@@ -114,7 +117,8 @@ export default function CustomerSignPage() {
 
     setIsSaving(true);
     try {
-      const res = await fetch('/api/sign-data', {
+      const url = refId ? `/api/sign-data?id=${encodeURIComponent(refId)}` : '/api/sign-data';
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -176,9 +180,12 @@ export default function CustomerSignPage() {
   }
 
   if (isSubmitted) {
+    const cleanAdminPhone = COMPANY_INFO.whatsapp.replace(/\D/g, '');
     const waText = encodeURIComponent(
-      `Halo Admin Rental,\n\nSaya *${form?.renterName || 'Penyewa'}* telah menandatangani dokumen perjanjian sewa kendaraan *${form?.vehicleName || ''}*.\n\nSilakan klik tautan berikut untuk memproses invoice:\n\n${returnUrl}\n\nTerima kasih!`
+      `Halo Admin,\n\nSaya *${form?.renterName || 'Penyewa'}* telah menandatangani dokumen perjanjian sewa kendaraan *${form?.vehicleName || ''}* dengan plat nomor *${form?.policeNumber || ''}*.\n\nBerikut tautan surat perjanjian saya:\n${returnUrl}\n\nTerima kasih!`
     );
+    const waUrl = `https://wa.me/${cleanAdminPhone}?text=${waText}`;
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '90dvh', padding: '2rem', textAlign: 'center' }}>
         <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: 'var(--success-muted)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem' }}>
@@ -188,7 +195,7 @@ export default function CustomerSignPage() {
         </div>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Tanda Tangan Berhasil!</h2>
         <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', maxWidth: '380px', lineHeight: 1.6 }}>
-          Dokumen sewa sudah ditandatangani dan tersimpan. Klik tombol WhatsApp di bawah untuk mengirim tautan ke admin rental agar invoice bisa diproses.
+          Dokumen sewa sudah ditandatangani. Klik tombol WhatsApp di bawah untuk langsung mengirimkan konfirmasi dan tautan dokumen ke admin rental.
         </p>
 
         {/* Short link preview card */}
@@ -200,7 +207,7 @@ export default function CustomerSignPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '400px' }}>
           <a
-            href={`https://wa.me/?text=${waText}`}
+            href={waUrl}
             target="_blank"
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.625rem',
@@ -213,8 +220,24 @@ export default function CustomerSignPage() {
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
               <path d="M11.99 2C6.469 2 2 6.478 2 12.011c0 1.763.461 3.462 1.338 4.95L2.05 21.945l5.099-1.268A9.96 9.96 0 0 0 11.99 22c5.522 0 9.99-4.478 9.99-10.011C21.98 6.478 17.511 2 11.99 2zm0 18.185a8.176 8.176 0 0 1-4.17-1.138l-.299-.178-3.095.77.82-2.99-.196-.308A8.154 8.154 0 0 1 3.824 12c0-4.512 3.656-8.185 8.166-8.185 4.51 0 8.166 3.673 8.166 8.185 0 4.51-3.656 8.185-8.166 8.185z"/>
             </svg>
-            Kirim ke WhatsApp Rental
+            Chat Admin (Konfirmasi TTD)
           </a>
+          
+          <button
+            type="button"
+            onClick={() => {
+              alert('Terima kasih! Anda dapat menutup halaman ini sekarang.');
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--accent)', color: '#fff', border: 'none',
+              borderRadius: '10px', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem',
+              cursor: 'pointer', boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.2)'
+            }}
+          >
+            Okee
+          </button>
+
           <button
             type="button"
             onClick={() => {

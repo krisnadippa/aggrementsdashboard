@@ -24,3 +24,13 @@ export async function initDb() {
     console.error('Failed to initialize database table:', err);
   }
 }
+
+// Helper to delete records older than 24 hours
+export async function cleanupExpiredDb() {
+  if (!sql) return;
+  try {
+    await sql`DELETE FROM rental_contracts WHERE expires_at < NOW()`;
+  } catch (err) {
+    console.error('Failed to cleanup expired database records:', err);
+  }
+}

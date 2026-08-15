@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql, initDb } from '@/lib/db';
+import { sql, initDb, cleanupExpiredDb } from '@/lib/db';
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -13,7 +13,7 @@ function generateId(): string {
   return id;
 }
 
-// POST /api/sign-data  — save signed form data to Postgres, return short ID
+// POST /api/sign-data  — save or update signed form data to Postgres
 export async function POST(req: NextRequest) {
   try {
     if (!sql) {
@@ -22,14 +22,29 @@ export async function POST(req: NextRequest) {
 
     // Auto-create table if not exists
     await initDb();
+    
+    // Auto-cleanup database rows older than 24 hours
+    await cleanupExpiredDb();
 
     const body = await req.json();
+    const idParam = req.nextUrl.searchParams.get('id');
+
+    if (idParam) {
+      // Update existing record with new data (e.g. customer signs the form)
+      await sql`
+        UPDATE rental_contracts 
+        SET data = ${body} 
+        WHERE id = ${idParam}
+      `;
+      return NextResponse.json({ id: idParam }, { status: 200 });
+    }
     
+    // Otherwise, insert new record
     let id = generateId();
     let collision = true;
     let tries = 0;
 
-    // Ensure no ID collision in db (using tagged template literal)
+    // Ensure no ID collision in db
     while (collision && tries < 10) {
       const existing = await sql`SELECT id FROM rental_contracts WHERE id = ${id}`;
       if (existing.length === 0) {
@@ -55,15 +70,43 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/sign-data?id=xxxx — retrieve saved form data by ID from Postgres
+// GET /api/sign-data — retrieve active contracts list OR retrieve single by ID
 export async function GET(req: NextRequest) {
   try {
     if (!sql) {
       return NextResponse.json({ error: 'DATABASE_URL is not configured in env' }, { status: 500 });
     }
 
+    // Auto-cleanup database rows older than 24 hours
+    await cleanupExpiredDb();
+
     const id = req.nextUrl.searchParams.get('id');
-    if (!id || !/^[a-z0-9]{6,16}$/.test(id)) {
+    
+    // If no ID is specified, return all active records (for the admin monitoring list)
+    if (!id) {
+      const rows = await sql`
+        SELECT id, data, created_at, expires_at 
+        FROM rental_contracts 
+        WHERE expires_at > NOW() 
+        ORDER BY created_at DESC
+      `;
+      
+      const list = rows.map((row) => ({
+        id: row.id,
+        renterName: row.data.renterName || '',
+        vehicleName: row.data.vehicleName || '',
+        policeNumber: row.data.policeNumber || '',
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        isSigned: !!row.data.signatureRenter,
+        data: row.data,
+      }));
+      
+      return NextResponse.json({ list }, { status: 200 });
+    }
+
+    // Otherwise, fetch single record
+    if (!/^[a-z0-9]{6,16}$/.test(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
     }
 
@@ -89,5 +132,24 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[sign-data GET]', err);
     return NextResponse.json({ error: 'Failed to retrieve data' }, { status: 500 });
+  }
+}
+
+// DELETE /api/sign-data?id=xxxx — delete contract by ID
+export async function DELETE(req: NextRequest) {
+  try {
+    if (!sql) {
+      return NextResponse.json({ error: 'DATABASE_URL is not configured' }, { status: 500 });
+    }
+    const id = req.nextUrl.searchParams.get('id');
+    if (!id || !/^[a-z0-9]{6,16}$/.test(id)) {
+      return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
+    }
+
+    await sql`DELETE FROM rental_contracts WHERE id = ${id}`;
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (err) {
+    console.error('[sign-data DELETE]', err);
+    return NextResponse.json({ error: 'Failed to delete data' }, { status: 500 });
   }
 }
