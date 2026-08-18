@@ -147,7 +147,18 @@ export default function Sidebar() {
 
         {/* Footer Area */}
         <div className="sidebar-footer">
-          <button className="sidebar-logout" onClick={() => alert('Keluar dari aplikasi')} title="Keluar">
+          <button 
+            className="sidebar-logout" 
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+              } catch (err) {
+                console.error('Logout error:', err);
+              }
+            }} 
+            title="Keluar"
+          >
             <span className="sidebar-icon-svg"><Icons.Logout /></span>
             {!isCollapsed && <span>Keluar</span>}
           </button>

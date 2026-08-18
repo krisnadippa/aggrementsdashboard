@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { hashPassword } from './auth-crypto';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -12,6 +13,7 @@ export const sql = databaseUrl ? neon(databaseUrl) : null;
 export async function initDb() {
   if (!sql) return;
   try {
+    // 1. Create rental_contracts table
     await sql`
       CREATE TABLE IF NOT EXISTS rental_contracts (
         id VARCHAR(50) PRIMARY KEY,
@@ -20,6 +22,31 @@ export async function initDb() {
         expires_at TIMESTAMP WITH TIME ZONE
       );
     `;
+
+    // 2. Create users table for authentication
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // 3. Seed default admin if empty
+    const usersCount = await sql`SELECT count(*) FROM users`;
+    const count = Number(usersCount[0]?.count || 0);
+    if (count === 0) {
+      const seedUsername = process.env.ADMIN_USERNAME || 'admin';
+      const seedPassword = process.env.ADMIN_PASSWORD || 'InfinityGoSecret2026!';
+      const passwordHash = hashPassword(seedPassword);
+
+      await sql`
+        INSERT INTO users (username, password_hash)
+        VALUES (${seedUsername}, ${passwordHash})
+      `;
+      console.log(`Database initialized: Seeded default user "${seedUsername}".`);
+    }
   } catch (err) {
     console.error('Failed to initialize database table:', err);
   }
