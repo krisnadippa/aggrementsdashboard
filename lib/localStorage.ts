@@ -48,29 +48,23 @@ function writeAll(records: TransactionRecord[]): void {
 }
 
 /**
- * Remove entries older than 24 hours.
- * Call this once when the dashboard page loads.
+ * Remove entries older than 24 hours. (Disabled: keep indefinitely)
  */
 export function cleanupExpired(): void {
-  const now = Date.now();
-  const all = readAll();
-  const valid = all.filter((r) => r.expiresAt > now);
-  if (valid.length !== all.length) {
-    writeAll(valid);
-  }
+  // Disabled auto-cleanup
 }
 
 /**
  * Save a new rental transaction.
  * Returns the created TransactionRecord.
  */
-export function saveTransaction(formData: RentalFormData): TransactionRecord {
+export function saveTransaction(formData: RentalFormData, customId?: string): TransactionRecord {
   const now = Date.now();
   const record: TransactionRecord = {
-    id: generateId(),
+    id: customId || generateId(),
     invoiceNumber: generateInvoiceNumber(),
     createdAt: now,
-    expiresAt: now + TTL_MS,
+    expiresAt: now + 100 * 365 * 24 * 60 * 60 * 1000, // 100 years from now (indefinite)
     formData,
   };
   const all = readAll();
@@ -79,21 +73,19 @@ export function saveTransaction(formData: RentalFormData): TransactionRecord {
 }
 
 /**
- * Retrieve all non-expired transactions (for history page).
+ * Retrieve all transactions (indefinite).
  */
 export function getTransactions(): TransactionRecord[] {
-  const now = Date.now();
-  return readAll().filter((r) => r.expiresAt > now);
+  return readAll();
 }
 
 /**
- * Get a single transaction by ID. Returns null if not found or expired.
+ * Get a single transaction by ID. Returns null if not found.
  */
 export function getTransaction(id: string): TransactionRecord | null {
-  const now = Date.now();
   const all = readAll();
   const found = all.find((r) => r.id === id);
-  if (!found || found.expiresAt <= now) return null;
+  if (!found) return null;
   return found;
 }
 
@@ -103,6 +95,22 @@ export function getTransaction(id: string): TransactionRecord | null {
 export function deleteTransaction(id: string): void {
   const all = readAll();
   writeAll(all.filter((r) => r.id !== id));
+}
+
+/**
+ * Update an existing rental transaction's form data.
+ * Returns the updated record or null if not found.
+ */
+export function updateTransaction(id: string, formData: RentalFormData): TransactionRecord | null {
+  const all = readAll();
+  const index = all.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  all[index] = {
+    ...all[index],
+    formData,
+  };
+  writeAll(all);
+  return all[index];
 }
 
 /**

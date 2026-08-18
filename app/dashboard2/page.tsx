@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions } from '@/lib/localStorage';
+import { cleanupExpired, saveTransaction, getTransactions, updateTransaction } from '@/lib/localStorage';
 import InvoiceForm2 from '@/components/InvoiceForm2';
 import ThemeToggle from '@/components/ThemeToggle';
 import { decodeShortData } from '@/lib/urlData';
@@ -11,6 +11,7 @@ import { decodeShortData } from '@/lib/urlData';
 export default function Dashboard2Page() {
   const [txnCount, setTxnCount] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [refId, setRefId] = useState<string | null>(null);
   const [prefillData, setPrefillData] = useState<RentalFormData | null>(null);
   const [refLoading, setRefLoading] = useState(false);
   const [refError, setRefError] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export default function Dashboard2Page() {
         setRefError('Tautan data tidak valid atau rusak.');
       }
     } else if (ref) {
+      setRefId(ref);
       setRefLoading(true);
       fetch(`/api/sign-data?id=${encodeURIComponent(ref)}`)
         .then(async (res) => {
@@ -56,8 +58,21 @@ export default function Dashboard2Page() {
   }, []);
 
   const handleFormSubmit = (data: RentalFormData) => {
-    const record = saveTransaction(data);
-    setSavedId(record.id);
+    if (refId) {
+      updateTransaction(refId, data);
+      
+      // Also post the update to Postgres DB
+      fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch((err) => console.error('Failed to sync updated contract to DB:', err));
+
+      setSavedId(refId);
+    } else {
+      const record = saveTransaction(data);
+      setSavedId(record.id);
+    }
   };
 
   return (

@@ -3,23 +3,50 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions } from '@/lib/localStorage';
+import { cleanupExpired, saveTransaction, getTransactions, getTransaction, updateTransaction } from '@/lib/localStorage';
 import InvoiceForm from '@/components/InvoiceForm';
 import ThemeToggle from '@/components/ThemeToggle';
 
 export default function DashboardPage() {
   const [txnCount, setTxnCount] = useState(0);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [prefillData, setPrefillData] = useState<RentalFormData | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   // Cleanup expired entries on mount
   useEffect(() => {
     cleanupExpired();
     setTxnCount(getTransactions().length);
+
+    const params = new URLSearchParams(window.location.search);
+    const editParam = params.get('edit');
+    if (editParam) {
+      setEditId(editParam);
+      const found = getTransaction(editParam);
+      if (found) {
+        setPrefillData(found.formData);
+      }
+    }
   }, []);
 
   const handleFormSubmit = (data: RentalFormData) => {
-    const record = saveTransaction(data);
-    setSavedId(record.id); // Open success modal instead of direct push
+    if (editId) {
+      updateTransaction(editId, data);
+      
+      // If it's a Neon DB contract (ID length is 8), sync the changes back to Postgres DB
+      if (editId.length === 8) {
+        fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        }).catch((err) => console.error('Failed to sync updated contract to DB:', err));
+      }
+
+      setSavedId(editId);
+    } else {
+      const record = saveTransaction(data);
+      setSavedId(record.id); // Open success modal instead of direct push
+    }
   };
 
   return (
@@ -40,7 +67,7 @@ export default function DashboardPage() {
 
       <div className="page-inner">
         {/* Form */}
-        <InvoiceForm onSubmit={handleFormSubmit} />
+        <InvoiceForm onSubmit={handleFormSubmit} prefillData={prefillData ?? undefined} />
       </div>
 
       {/* Beautiful Success Modal Popup */}
@@ -83,9 +110,13 @@ export default function DashboardPage() {
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
             </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Invoice Disimpan!</h3>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              {editId ? 'Invoice Diperbarui!' : 'Invoice Disimpan!'}
+            </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1.75rem', lineHeight: 1.5 }}>
-              Perjanjian sewa rental mobil berhasil disimpan ke penyimpanan lokal browser Anda.
+              {editId 
+                ? 'Perjanjian sewa rental mobil berhasil diperbarui di penyimpanan lokal browser Anda.' 
+                : 'Perjanjian sewa rental mobil berhasil disimpan ke penyimpanan lokal browser Anda.'}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <Link
@@ -101,7 +132,11 @@ export default function DashboardPage() {
                 style={{ width: '100%' }}
                 onClick={() => {
                   setSavedId(null);
-                  window.location.reload(); // Hard reset form state
+                  if (editId) {
+                    window.location.href = '/'; // clear query params and reset state cleanly
+                  } else {
+                    window.location.reload(); // Hard reset form state
+                  }
                 }}
               >
                 Buat Transaksi Baru

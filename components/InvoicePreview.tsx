@@ -163,30 +163,8 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
           <VehicleConditionDiagram markers={f.damageMarkers} readOnly />
           <div className="inv-fuel-row">
             <div>
-              {f.vehicleType === 'ev' ? (
-                <>
-                  <h4 className="inv-fuel-title">Daya Baterai (EV)</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '160px', background: '#f8fafc', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', marginTop: '0.5rem' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
-                      <rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect>
-                      <line x1="22" y1="11" x2="22" y2="13"></line>
-                    </svg>
-                    <div style={{ flex: 1, height: '12px', background: '#cbd5e1', borderRadius: '3px', overflow: 'hidden', position: 'relative' }}>
-                      <div style={{
-                        width: `${f.fuelLevel}%`,
-                        height: '100%',
-                        background: f.fuelLevel < 20 ? 'var(--danger)' : f.fuelLevel < 50 ? 'var(--warning)' : 'var(--success)'
-                      }} />
-                    </div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{f.fuelLevel}%</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h4 className="inv-fuel-title">Indikator BBM</h4>
-                  <FuelIndicator value={f.fuelLevel} readOnly />
-                </>
-              )}
+              <h4 className="inv-fuel-title">{f.vehicleType === 'ev' ? 'Daya Baterai (EV)' : 'Indikator BBM'}</h4>
+              <FuelIndicator value={f.fuelLevel} vehicleType={f.vehicleType} readOnly />
             </div>
             <div className="inv-checklist">
               <h4 className="inv-fuel-title">Kelengkapan</h4>

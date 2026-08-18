@@ -4,157 +4,140 @@ interface FuelIndicatorProps {
   value: number; // 0-100
   onChange?: (v: number) => void;
   readOnly?: boolean;
+  vehicleType?: 'petrol' | 'ev';
 }
 
-const SEGMENTS = 8; // E, 1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8, F
-
-function FuelGauge({ value }: { value: number }) {
-  // Arc from 225° to -45° (270° sweep)
-  const cx = 70, cy = 70, r = 54;
-  const startAngle = 225;
-  const endAngle = 315; // going clockwise, total 270°
-  const totalAngle = 270;
-
-  // Needle angle
-  const needleAngle = startAngle + (value / 100) * totalAngle;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  const arcX = (angle: number, radius: number) => {
-    const val = cx + radius * Math.cos(toRad(angle));
-    return Math.round(val * 1000) / 1000;
+// Visual growing vertical bars for Petrol/BBM dashboard style
+function FuelBars({ value }: { value: number }) {
+  const numBars = 8;
+  const barWidth = 8;
+  const barGap = 3;
+  
+  const getBarColor = (index: number, isActive: boolean) => {
+    if (!isActive) return 'var(--border)'; // gray/inactive border color
+    
+    // Dashboard colors based on segment position
+    if (index < 2) return '#ef4444'; // Red for low fuel (1/4 or less)
+    if (index < 4) return '#f59e0b'; // Amber/Yellow for mid fuel (1/2 or less)
+    return '#10b981'; // Green for high fuel
   };
-  const arcY = (angle: number, radius: number) => {
-    const val = cy + radius * Math.sin(toRad(angle));
-    return Math.round(val * 1000) / 1000;
-  };
-
-  // Gradient arc — split into colored segments
-  const segmentColors = (seg: number, total: number) => {
-    const pct = seg / total;
-    if (pct <= 0.25) return '#e53e3e';
-    if (pct <= 0.5) return '#d69e2e';
-    return '#38a169';
-  };
-
-  const segments = 36; // smooth arc
-  const arcPath = () => {
-    const paths: string[] = [];
-    for (let i = 0; i < segments; i++) {
-      const a1 = startAngle + (i / segments) * totalAngle;
-      const a2 = startAngle + ((i + 1) / segments) * totalAngle;
-      const x1 = arcX(a1, r), y1 = arcY(a1, r);
-      const x2 = arcX(a2, r), y2 = arcY(a2, r);
-      paths.push(
-        `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${segmentColors(i, segments)}" stroke-width="10" stroke-linecap="round"/>`
-      );
-    }
-    return paths.join('');
-  };
-
-  // Filled portion
-  const filledAngle = startAngle + (value / 100) * totalAngle;
-
-  const needleLen = 40;
-  const nx = Math.round((cx + needleLen * Math.cos(toRad(needleAngle))) * 1000) / 1000;
-  const ny = Math.round((cy + needleLen * Math.sin(toRad(needleAngle))) * 1000) / 1000;
 
   return (
-    <svg
-      viewBox="0 0 140 140"
-      width="140"
-      height="140"
-      className="fuel-gauge-svg"
-    >
-      {/* Background track */}
-      {Array.from({ length: segments }).map((_, i) => {
-        const a1 = startAngle + (i / segments) * totalAngle;
-        const a2 = startAngle + ((i + 1) / segments) * totalAngle;
-        const x1 = arcX(a1, r), y1 = arcY(a1, r);
-        const x2 = arcX(a2, r), y2 = arcY(a2, r);
+    <div style={{ display: 'inline-flex', alignItems: 'flex-end', gap: `${barGap}px`, height: '24px' }}>
+      {Array.from({ length: numBars }).map((_, i) => {
+        const threshold = ((i + 1) / numBars) * 100;
+        const isActive = value >= threshold - 5; // slight margin for slider steps
+        const barHeight = 6 + i * 2.5; // growing height
         return (
-          <line
+          <div
             key={i}
-            x1={x1} y1={y1} x2={x2} y2={y2}
-            stroke="#e2e8f0"
-            strokeWidth="10"
-            strokeLinecap="round"
+            style={{
+              width: `${barWidth}px`,
+              height: `${barHeight}px`,
+              backgroundColor: getBarColor(i, isActive),
+              borderRadius: '1.5px',
+              transition: 'background-color 0.2s ease'
+            }}
           />
         );
       })}
-      {/* Filled arc */}
-      {Array.from({ length: segments }).map((_, i) => {
-        const pct = (i + 0.5) / segments;
-        const currAngle = startAngle + pct * totalAngle;
-        if (currAngle > filledAngle) return null;
-        const a1 = startAngle + (i / segments) * totalAngle;
-        const a2 = startAngle + ((i + 1) / segments) * totalAngle;
-        const x1 = arcX(a1, r), y1 = arcY(a1, r);
-        const x2 = arcX(a2, r), y2 = arcY(a2, r);
-        return (
-          <line
-            key={`f${i}`}
-            x1={x1} y1={y1} x2={x2} y2={y2}
-            stroke={segmentColors(i, segments)}
-            strokeWidth="10"
-            strokeLinecap="round"
-          />
-        );
-      })}
-      {/* Tick marks */}
-      {Array.from({ length: 9 }).map((_, i) => {
-        const angle = startAngle + (i / 8) * totalAngle;
-        const inner = r - 12, outer = r - 6;
-        return (
-          <line
-            key={`tick${i}`}
-            x1={arcX(angle, inner)} y1={arcY(angle, inner)}
-            x2={arcX(angle, outer)} y2={arcY(angle, outer)}
-            stroke="#718096"
-            strokeWidth="1.5"
-          />
-        );
-      })}
-      {/* Needle */}
-      <line
-        x1={cx} y1={cy} x2={nx} y2={ny}
-        stroke="#1a202c"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      />
-      {/* Center dot */}
-      <circle cx={cx} cy={cy} r="5" fill="#1a202c" />
-      {/* Labels */}
-      <text x={arcX(startAngle, r + 14)} y={arcY(startAngle, r + 14) + 4}
-        textAnchor="middle" fontSize="9" fill="#e53e3e" fontWeight="700">E</text>
-      <text x={arcX(endAngle, r + 14)} y={arcY(endAngle, r + 14) + 4}
-        textAnchor="middle" fontSize="9" fill="#38a169" fontWeight="700">F</text>
-      {/* Value text */}
-      <text x={cx} y={cy + 26} textAnchor="middle" fontSize="11" fill="#4a5568" fontWeight="600">
-        {value}%
-      </text>
-    </svg>
+    </div>
   );
 }
 
-export default function FuelIndicator({ value, onChange, readOnly }: FuelIndicatorProps) {
-  return (
-    <div className="fuel-indicator">
-      <FuelGauge value={value} />
-      {!readOnly && onChange && (
-        <div className="fuel-slider-wrap">
-          <span className="fuel-label-e">E</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={12.5}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="fuel-slider"
-          />
-          <span className="fuel-label-f">F</span>
+export default function FuelIndicator({
+  value,
+  onChange,
+  readOnly,
+  vehicleType = 'petrol',
+}: FuelIndicatorProps) {
+  const isEv = vehicleType === 'ev';
+
+  // Choose Icon based on vehicle type
+  const renderIcon = () => {
+    if (isEv) {
+      return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
+          <rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect>
+          <line x1="22" y1="11" x2="22" y2="13"></line>
+        </svg>
+      );
+    }
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
+        <path d="M3 22V2h11v20H3zM14 6h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4M9 8h2M9 12h2"></path>
+      </svg>
+    );
+  };
+
+  // Color logic for horizontal EV bar indicator
+  const barColor = value < 20 ? 'var(--danger)' : value < 50 ? 'var(--warning)' : 'var(--success)';
+
+  // ─── READ ONLY VIEW ───
+  if (readOnly) {
+    if (!isEv) {
+      // Petrol: growing dashboard bars
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', maxWidth: '240px', background: 'var(--bg-hover)', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)' }}>
+          {renderIcon()}
+          <FuelBars value={value} />
+          <span style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{value}%</span>
         </div>
-      )}
+      );
+    }
+
+    // EV: horizontal battery bar
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', maxWidth: '240px', background: 'var(--bg-hover)', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)' }}>
+        {renderIcon()}
+        <div style={{ flex: 1, height: '12px', background: '#cbd5e1', borderRadius: '3px', overflow: 'hidden', position: 'relative' }}>
+          <div style={{
+            width: `${value}%`,
+            height: '100%',
+            background: barColor,
+            transition: 'width 0.3s ease'
+          }} />
+        </div>
+        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{value}%</span>
+      </div>
+    );
+  }
+
+  // ─── INTERACTIVE MODE (EDITABLE) ───
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+        <span>{isEv ? 'KAPASITAS BATERAI:' : 'LEVEL BBM:'}</span>
+        <span style={{ color: 'var(--accent)' }}>{value}%</span>
+      </div>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="5"
+        value={value}
+        onChange={(e) => onChange && onChange(Number(e.target.value))}
+        style={{ width: '100%', height: '6px', accentColor: 'var(--accent)', cursor: 'pointer' }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-hover)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+        {renderIcon()}
+        {isEv ? (
+          // EV: battery progress bar
+          <div style={{ flex: 1, height: '14px', background: '#cbd5e1', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
+            <div style={{
+              width: `${value}%`,
+              height: '100%',
+              background: barColor,
+              transition: 'width 0.2s ease, background-color 0.2s ease'
+            }} />
+          </div>
+        ) : (
+          // Petrol: growing segments
+          <div style={{ display: 'flex', alignItems: 'center', height: '24px', marginLeft: '0.25rem' }}>
+            <FuelBars value={value} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

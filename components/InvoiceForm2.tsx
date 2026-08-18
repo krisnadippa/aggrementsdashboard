@@ -432,60 +432,11 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 </div>
               </div>
 
-              {form.vehicleType === 'petrol' ? (
-                <>
-                  <div className="fuel-buttons-grid">
-                    {[
-                      { label: '1/4 Tank', val: 25 },
-                      { label: '1/2 Tank', val: 50 },
-                      { label: '3/4 Tank', val: 75 },
-                      { label: 'Full Tank', val: 100 },
-                    ].map((item) => (
-                      <button
-                        key={item.val}
-                        type="button"
-                        className={`fuel-option-btn ${form.fuelLevel === item.val ? 'fuel-option-btn-active' : ''}`}
-                        onClick={() => set('fuelLevel', item.val)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.75rem' }}>
-                    <FuelIndicator value={form.fuelLevel} readOnly />
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    <span>KAPASITAS BATERAI:</span>
-                    <span style={{ color: 'var(--accent)' }}>{form.fuelLevel}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={form.fuelLevel}
-                    onChange={(e) => set('fuelLevel', Number(e.target.value))}
-                    style={{ width: '100%', height: '6px', accentColor: 'var(--accent)', cursor: 'pointer' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', background: '#f8fafc', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
-                      <rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect>
-                      <line x1="22" y1="11" x2="22" y2="13"></line>
-                    </svg>
-                    <div style={{ flex: 1, height: '14px', background: '#cbd5e1', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
-                      <div style={{
-                        width: `${form.fuelLevel}%`,
-                        height: '100%',
-                        background: form.fuelLevel < 20 ? 'var(--danger)' : form.fuelLevel < 50 ? 'var(--warning)' : 'var(--success)',
-                        transition: 'width 0.2s ease, background-color 0.2s ease'
-                      }} />
-                    </div>
-                  </div>
-                </div>
-              )}
+              <FuelIndicator
+                value={form.fuelLevel}
+                onChange={(val) => set('fuelLevel', val)}
+                vehicleType={form.vehicleType}
+              />
             </section>
           </div>
 
@@ -612,6 +563,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 const payload = { ...form, signatureRenter: '' };
                 const host = window.location.origin;
                 let shareUrl = '';
+                let dbId: string | undefined = undefined;
 
                 try {
                   const res = await fetch('/api/sign-data', {
@@ -621,6 +573,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                   });
                   if (!res.ok) throw new Error('API save failed');
                   const { id } = await res.json();
+                  dbId = id;
                   shareUrl = `${host}/customer-sign?ref=${id}`;
                 } catch (err) {
                   console.warn('API save failed, falling back to URL encoding:', err);
@@ -645,7 +598,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 window.open(waUrl, '_blank');
                  
                 // Save the invoice transaction to local browser history
-                saveTransaction(form);
+                saveTransaction(form, dbId);
                  
                 // Redirect admin directly to the list/history page
                 router.push('/history');

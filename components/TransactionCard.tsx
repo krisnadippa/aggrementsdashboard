@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { TransactionRecord } from '@/types';
-import { hoursUntilExpiry, deleteTransaction } from '@/lib/localStorage';
+import { deleteTransaction } from '@/lib/localStorage';
 
 interface TransactionCardProps {
   record: TransactionRecord;
@@ -19,25 +19,58 @@ function formatDate(ts: number) {
 
 export default function TransactionCard({ record, onDelete }: TransactionCardProps) {
   const { formData: f } = record;
-  const hoursLeft = hoursUntilExpiry(record);
 
   const handleDelete = () => {
     onDelete(record.id);
   };
 
+  const hasRentalSig = !!f.signatureRental;
+  const hasRenterSig = !!f.signatureRenter;
+  
+  let statusText = '';
+  let statusBg = '';
+  let statusColor = '';
+  let dotColor = '';
+
+  if (hasRentalSig && hasRenterSig) {
+    statusText = 'Sudah Ditandatangani';
+    statusBg = 'var(--success-muted)';
+    statusColor = 'var(--success)';
+    dotColor = 'var(--success)';
+  } else if (!hasRentalSig && !hasRenterSig) {
+    statusText = 'Belum Ditandatangani';
+    statusBg = 'var(--danger-muted)';
+    statusColor = 'var(--danger)';
+    dotColor = 'var(--danger)';
+  } else {
+    statusText = 'Tanda Tangan Parsial';
+    statusBg = 'var(--warning-muted)';
+    statusColor = 'var(--warning)';
+    dotColor = 'var(--warning)';
+  }
+
   return (
     <div className="txn-card">
-      <div className="txn-card-header">
+      <div className="txn-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
         <div>
           <span className="txn-invoice-num">{record.invoiceNumber}</span>
           <p className="txn-date">{formatDate(record.createdAt)}</p>
         </div>
-        <div className="txn-expiry-badge" title={`Kedaluwarsa dalam ${hoursLeft} jam`}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-          </svg>
-          {hoursLeft}j tersisa
-        </div>
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.375rem',
+          background: statusBg,
+          color: statusColor,
+          padding: '0.25rem 0.5rem',
+          borderRadius: '50px',
+          fontSize: '0.6875rem',
+          fontWeight: 700,
+          flexShrink: 0
+        }}>
+          <span style={{ width: '5px', height: '5px', background: dotColor, borderRadius: '50%' }}></span>
+          {statusText}
+        </span>
       </div>
 
       <div className="txn-card-body">
@@ -61,7 +94,10 @@ export default function TransactionCard({ record, onDelete }: TransactionCardPro
 
       <div className="txn-card-footer">
         <Link href={`/invoice/${record.id}`} className="btn btn-sm btn-outline" id={`view-invoice-${record.id}`}>
-          Lihat Invoice
+          Lihat
+        </Link>
+        <Link href={`/?edit=${record.id}`} className="btn btn-sm btn-outline" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} id={`edit-invoice-${record.id}`}>
+          Edit
         </Link>
         <button
           className="btn btn-sm btn-danger"
@@ -72,14 +108,7 @@ export default function TransactionCard({ record, onDelete }: TransactionCardPro
         </button>
       </div>
 
-      <div className="txn-auto-delete-note" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-          <line x1="12" y1="9" x2="12" y2="13"></line>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-        <span>Data otomatis terhapus dalam 24 jam sejak dibuat</span>
-      </div>
+
     </div>
   );
 }
