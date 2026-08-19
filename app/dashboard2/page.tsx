@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions, updateTransaction } from '@/lib/localStorage';
+import { cleanupExpired, saveTransaction, getTransactions, updateTransaction, generateInvoiceNumber, getTransaction } from '@/lib/localStorage';
 import InvoiceForm2 from '@/components/InvoiceForm2';
 import ThemeToggle from '@/components/ThemeToggle';
 import { decodeShortData } from '@/lib/urlData';
@@ -57,21 +57,52 @@ export default function Dashboard2Page() {
     }
   }, []);
 
-  const handleFormSubmit = (data: RentalFormData) => {
-    if (refId) {
-      updateTransaction(refId, data);
-      
-      // Also post the update to Postgres DB
-      fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }).catch((err) => console.error('Failed to sync updated contract to DB:', err));
+  const handleFormSubmit = async (data: RentalFormData) => {
+    try {
+      if (refId) {
+        // Preserving existing invoiceNumber if available in form state
+        const original = getTransaction(refId);
+        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
 
-      setSavedId(refId);
-    } else {
-      const record = saveTransaction(data);
-      setSavedId(record.id);
+        // Update in DB
+        await fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        updateTransaction(refId, payload);
+        setSavedId(refId);
+      } else {
+        // Generate new invoice number on client side
+        const invoiceNum = generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
+
+        // Create in DB
+        const res = await fetch('/api/sign-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Gagal menyimpan ke database');
+        const { id } = await res.json();
+        saveTransaction(payload, id);
+        setSavedId(id);
+      }
+    } catch (err) {
+      console.error('Failed to save to DB, falling back to local storage:', err);
+      if (refId) {
+        const original = getTransaction(refId);
+        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
+        updateTransaction(refId, payload);
+        setSavedId(refId);
+      } else {
+        const invoiceNum = generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
+        const record = saveTransaction(payload);
+        setSavedId(record.id);
+      }
     }
   };
 
@@ -94,11 +125,27 @@ export default function Dashboard2Page() {
       <div className="page-inner">
         {/* Loading state when fetching signed data from customer */}
         {refLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', padding: '2rem', background: 'var(--accent-muted)', borderRadius: 'var(--radius)', marginBottom: '1.5rem', border: '1px solid var(--accent)' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', animation: 'spin 1s linear infinite' }}>
-              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-            </svg>
-            <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '0.9375rem' }}>Memuat data TTD penyewa...</span>
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.75rem', 
+              padding: '1.25rem 1.5rem', 
+              background: 'var(--bg-card)', 
+              borderRadius: 'var(--radius)', 
+              marginBottom: '1.5rem', 
+              border: '1px solid var(--border)',
+              animation: 'pulse-glow 1.5s infinite' 
+            }}
+          >
+            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--border)' }} />
+            <div style={{ height: '14px', width: '220px', background: 'var(--border)', borderRadius: '4px' }} />
+            <style jsx>{`
+              @keyframes pulse-glow {
+                0%, 100% { opacity: 0.6; }
+                50% { opacity: 0.3; }
+              }
+            `}</style>
           </div>
         )}
 

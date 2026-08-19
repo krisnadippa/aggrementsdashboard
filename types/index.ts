@@ -60,6 +60,13 @@ export interface RentalFormData {
   // Signatures (base64 data URLs)
   signatureRental: string;
   signatureRenter: string;
+
+  // Uploaded photos (base64 data URLs)
+  ktpPhotos?: string[];
+  carPhotos?: string[];
+
+  // Metadata
+  invoiceNumber?: string;
 }
 
 // Static vehicle data

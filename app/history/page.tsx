@@ -21,37 +21,71 @@ export default function HistoryPage() {
   
   // Search and Pagination States
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
   const itemsPerPage = 10;
 
+  // Debounce search query input (400ms delay)
   useEffect(() => {
-    cleanupExpired();
-    const localRecords = getTransactions().sort((a, b) => b.createdAt - a.createdAt);
-    setRecords(localRecords);
-    setLoaded(true);
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1); // Reset to page 1 on new search term
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
-    // Background sync: for any local storage records that don't have renter's signature
-    // and have a Neon DB ID (length of DB ID is 8 characters)
-    localRecords.forEach((record) => {
-      if (!record.formData.signatureRenter && record.id.length === 8) {
-        fetch(`/api/sign-data?id=${record.id}`)
-          .then((res) => {
-            if (res.ok) return res.json();
-          })
-          .then(({ data }) => {
-            if (data && data.signatureRenter) {
-              const updated = updateTransaction(record.id, data);
-              if (updated) {
-                setRecords((prev) =>
-                  prev.map((r) => (r.id === record.id ? updated : r))
-                );
-              }
-            }
-          })
-          .catch((err) => console.error('Error background-syncing contract:', err));
-      }
-    });
-  }, []);
+  // Load records from DB based on pagination and debounced search term
+  useEffect(() => {
+    setLoaded(false);
+    
+    // Fetch directly from Neon database with server-side pagination & search
+    fetch(`/api/sign-data?search=${encodeURIComponent(debouncedSearch)}&page=${currentPage}&limit=${itemsPerPage}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch from DB');
+        return res.json();
+      })
+      .then(({ list, total }) => {
+        if (list) {
+          const mapped: TransactionRecord[] = list.map((item: any) => ({
+            id: item.id,
+            invoiceNumber: item.data.invoiceNumber || `INV-${item.id.toUpperCase()}`,
+            createdAt: new Date(item.createdAt).getTime(),
+            expiresAt: new Date(item.expiresAt).getTime(),
+            formData: item.data
+          }));
+          setRecords(mapped);
+          setTotalRecords(total !== undefined ? total : list.length);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching history from Postgres DB:', err);
+        // Fallback to local storage if DB is down/not configured
+        const localRecords = getTransactions().sort((a, b) => b.createdAt - a.createdAt);
+        
+        // Filter locally in fallback scenario
+        const q = debouncedSearch.toLowerCase().trim();
+        const filtered = localRecords.filter((r) => {
+          if (!q) return true;
+          return (
+            r.invoiceNumber.toLowerCase().includes(q) ||
+            (r.formData.renterName || '').toLowerCase().includes(q) ||
+            (r.formData.vehicleName || '').toLowerCase().includes(q) ||
+            (r.formData.policeNumber || '').toLowerCase().includes(q)
+          );
+        });
+
+        setTotalRecords(filtered.length);
+        const sliced = filtered.slice(
+          (currentPage - 1) * itemsPerPage,
+          currentPage * itemsPerPage
+        );
+        setRecords(sliced);
+      })
+      .finally(() => {
+        setLoaded(true);
+      });
+  }, [debouncedSearch, currentPage]);
 
   const handleDeleteRequest = (id: string) => {
     const target = records.find((r) => r.id === id);
@@ -71,34 +105,13 @@ export default function HistoryPage() {
       
       deleteTransaction(deleteTarget.id);
       setRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+      setTotalRecords((prev) => Math.max(0, prev - 1));
       setDeleteTarget(null);
     }
   };
 
-  // Filter records based on search query
-  const filteredRecords = records.filter((record) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-
-    const invoiceNum = record.invoiceNumber.toLowerCase();
-    const renterName = (record.formData.renterName || '').toLowerCase();
-    const vehicleName = (record.formData.vehicleName || '').toLowerCase();
-    const policeNumber = (record.formData.policeNumber || '').toLowerCase();
-
-    return (
-      invoiceNum.includes(q) ||
-      renterName.includes(q) ||
-      vehicleName.includes(q) ||
-      policeNumber.includes(q)
-    );
-  });
-
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
-  const paginatedRecords = filteredRecords.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const totalPages = Math.ceil(totalRecords / itemsPerPage);
+  const paginatedRecords = records;
 
   return (
     <>
@@ -156,20 +169,41 @@ export default function HistoryPage() {
         </div>
 
         {!loaded ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin" style={{ color: 'var(--text-muted)' }}>
-                <line x1="12" y1="2" x2="12" y2="6"></line>
-                <line x1="12" y1="18" x2="12" y2="22"></line>
-                <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-                <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-                <line x1="2" y1="12" x2="6" y2="12"></line>
-                <line x1="18" y1="12" x2="22" y2="12"></line>
-                <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-                <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-              </svg>
-            </div>
-            <p className="empty-state-title">Memuat data...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+            {/* Pulsing Table Header */}
+            <div style={{ height: '40px', background: 'var(--border)', borderRadius: '8px', opacity: 0.5, animation: 'pulse-glow 1.5s infinite' }} />
+            
+            {/* Pulsing Rows */}
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div 
+                key={idx} 
+                className="no-print"
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '1.5fr 1.2fr 2fr 2fr 1fr 1.5fr 1.5fr', 
+                  gap: '1rem', 
+                  padding: '1.25rem 1rem', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius)',
+                  alignItems: 'center',
+                  background: 'var(--bg-card)'
+                }}
+              >
+                <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '22px', background: 'var(--border)', borderRadius: '50px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '30px', background: 'var(--border)', borderRadius: '6px', animation: 'pulse-glow 1.5s infinite' }} />
+              </div>
+            ))}
+            <style jsx>{`
+              @keyframes pulse-glow {
+                0%, 100% { opacity: 0.6; }
+                50% { opacity: 0.3; }
+              }
+            `}</style>
           </div>
         ) : records.length === 0 ? (
           <div className="empty-state">
@@ -190,7 +224,7 @@ export default function HistoryPage() {
               Buat Transaksi Baru
             </Link>
           </div>
-        ) : filteredRecords.length === 0 ? (
+        ) : totalRecords === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
             <p style={{ fontSize: '1rem', fontWeight: 600 }}>Tidak ada hasil pencarian ditemukan</p>
             <p style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>Coba cari nama penyewa, no plat, atau nomor invoice lainnya.</p>
@@ -198,7 +232,7 @@ export default function HistoryPage() {
         ) : (
           <>
             <p style={{ marginBottom: '1.25rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Menampilkan {paginatedRecords.length} dari {filteredRecords.length} invoice ditemukan
+              Menampilkan {paginatedRecords.length} dari {totalRecords} invoice ditemukan
             </p>
 
             <div className="table-responsive-custom" style={{ overflowX: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', boxShadow: 'var(--shadow-sm)' }}>

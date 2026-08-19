@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, use } from 'react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { TransactionRecord, RentalFormData, DamageMarker } from '@/types';
-import { getTransaction, updateTransaction } from '@/lib/localStorage';
+import { getTransaction, updateTransaction, compressImage } from '@/lib/localStorage';
 import InvoicePreview from '@/components/InvoicePreview';
 import SignaturePad from '@/components/SignaturePad';
 import VehicleConditionDiagram from '@/components/VehicleConditionDiagram';
@@ -33,40 +33,93 @@ export default function InvoicePage({ params }: InvoicePageProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const found = getTransaction(id);
-    setRecord(found);
-    if (found) {
-      setFormState(found.formData);
+    // Clear old state during route transitions
+    setRecord(undefined);
+    setFormState(null);
 
-      // Auto-sync if customer signature is missing and it's a Neon DB ID (length of DB ID is 8)
-      if (!found.formData.signatureRenter && id.length === 8) {
-        fetch(`/api/sign-data?id=${id}`)
-          .then((res) => {
-            if (res.ok) return res.json();
-          })
-          .then(({ data }) => {
-            if (data && data.signatureRenter) {
-              const updated = updateTransaction(id, data);
-              if (updated) {
-                setRecord(updated);
-                setFormState(updated.formData);
-              }
-            }
-          })
-          .catch((err) => console.error('Error auto-syncing detail page:', err));
-      }
-    }
+    // Fetch directly from Neon database API
+    fetch(`/api/sign-data?id=${id}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Data tidak ditemukan di database');
+        return res.json();
+      })
+      .then(({ data }) => {
+        if (data) {
+          const rec: TransactionRecord = {
+            id: id,
+            invoiceNumber: data.invoiceNumber || `INV-${id.toUpperCase()}`,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
+            formData: data
+          };
+          setRecord(rec);
+          setFormState(data);
+        } else {
+          setRecord(null);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error fetching from DB, falling back to localStorage:', err);
+        const found = getTransaction(id);
+        if (found) {
+          setRecord(found);
+          setFormState(found.formData);
+        } else {
+          setRecord(null);
+        }
+      });
   }, [id]);
 
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: record ? `Invoice-${record.invoiceNumber}` : 'Invoice',
-    pageStyle: `
-      @page { size: A4; margin: 1cm; }
-      body { font-family: 'Inter', Arial, sans-serif; }
-      .no-print, .invoice-page-actions, .navbar, .tab-header-nav { display: none !important; }
-    `,
-  });
+  const handleDownloadPDF = () => {
+    const element = printRef.current;
+    if (!element) return;
+    
+    const loadAndGenerate = () => {
+      // Switch to print tab temporarily to ensure element is populated and displayed
+      const prevTab = activeTab;
+      setActiveTab('print');
+
+      // Wait for the render to complete and then check images
+      setTimeout(() => {
+        const images = element.querySelectorAll('img');
+        const promises = Array.from(images).map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        });
+
+        Promise.all(promises).then(() => {
+          // @ts-ignore
+          const html2pdf = window.html2pdf;
+          const opt = {
+            margin:       10,
+            filename:     `Invoice-${record ? record.invoiceNumber : 'document'}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, logging: false },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+          html2pdf().from(element).set(opt).save().then(() => {
+            // Switch back to the previous tab after download completes
+            setActiveTab(prevTab);
+          });
+        });
+      }, 300);
+    };
+
+    // @ts-ignore
+    if (window.html2pdf) {
+      loadAndGenerate();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      script.onload = () => {
+        loadAndGenerate();
+      };
+      document.head.appendChild(script);
+    }
+  };
 
   const handleChecklist = (itemId: string, checked: boolean) => {
     if (!formState) return;
@@ -108,29 +161,146 @@ export default function InvoicePage({ params }: InvoicePageProps) {
     });
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'ktpPhotos' | 'carPhotos') => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const currentImages = formState?.[field] || [];
+    if (currentImages.length + files.length > 2) {
+      alert('Maksimal 2 foto saja');
+      return;
+    }
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 4 * 1024 * 1024) {
+        alert('File terlalu besar. Maksimal ukuran file adalah 4MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        if (typeof reader.result === 'string') {
+          const compressed = await compressImage(reader.result);
+          setFormState((prev) => {
+            if (!prev) return null;
+            const updated = [...(prev[field] || [])];
+            if (updated.length < 2) {
+              updated.push(compressed);
+            }
+            return { ...prev, [field]: updated };
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number, field: 'ktpPhotos' | 'carPhotos') => {
+    setFormState((prev) => {
+      if (!prev) return null;
+      const updated = [...(prev[field] || [])];
+      updated.splice(index, 1);
+      return { ...prev, [field]: updated };
+    });
+  };
+
   const handleSaveChanges = () => {
     if (!formState) return;
     setIsSaving(true);
-    const updatedRecord = updateTransaction(id, formState);
-    if (updatedRecord) {
-      setRecord(updatedRecord);
-      setSaveSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      setTimeout(() => setSaveSuccess(false), 4000);
-    } else {
-      alert('Gagal menyimpan perubahan.');
-    }
-    setIsSaving(false);
+    
+    fetch(`/api/sign-data?id=${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formState),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Gagal menyimpan ke database');
+        return res.json();
+      })
+      .then(() => {
+        const updatedRecord = updateTransaction(id, formState);
+        if (updatedRecord) {
+          setRecord(updatedRecord);
+        } else {
+          setRecord({
+            id: id,
+            invoiceNumber: record?.invoiceNumber || `INV-${id.toUpperCase()}`,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
+            formData: formState
+          });
+        }
+        setSaveSuccess(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => setSaveSuccess(false), 4000);
+      })
+      .catch((err) => {
+        alert(err.message || 'Gagal menyimpan perubahan.');
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
   };
 
-  // Loading state
+  // Loading state (pulsing skeleton)
   if (record === undefined || (activeTab === 'interactive' && !formState)) {
     return (
       <div className="page-inner">
-        <div className="empty-state">
-          <div className="empty-state-icon">⏳</div>
-          <p className="empty-state-title">Memuat invoice...</p>
+        {/* Shimmer Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ height: '32px', width: '220px', background: 'var(--border)', borderRadius: '6px', animation: 'pulse-glow 1.5s infinite' }} />
+          <div style={{ height: '32px', width: '120px', background: 'var(--border)', borderRadius: '6px', animation: 'pulse-glow 1.5s infinite' }} />
         </div>
+
+        {/* Shimmer Navigation Tabs */}
+        <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', marginBottom: '2rem' }}>
+          <div style={{ height: '36px', width: '140px', background: 'var(--border)', borderRadius: '20px', animation: 'pulse-glow 1.5s infinite' }} />
+          <div style={{ height: '36px', width: '140px', background: 'var(--border)', borderRadius: '20px', animation: 'pulse-glow 1.5s infinite' }} />
+        </div>
+
+        {/* Shimmer Content Grid */}
+        <div className="form-main-columns-grid">
+          {/* Left Column (Checklist / Vehicle view) */}
+          <div className="form-column-left">
+            <div className="form-card-section" style={{ height: '380px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ height: '24px', width: '60%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ flex: 1, background: 'var(--border)', borderRadius: '8px', animation: 'pulse-glow 1.5s infinite' }} />
+            </div>
+            <div className="form-card-section" style={{ height: '180px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ height: '24px', width: '50%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ height: '14px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+            </div>
+          </div>
+
+          {/* Right Column (Forms, Details, Signatures) */}
+          <div className="form-column-right">
+            <div className="form-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div style={{ height: '24px', width: '40%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ height: '12px', width: '25%', background: 'var(--border)', borderRadius: '3px', animation: 'pulse-glow 1.5s infinite' }} />
+                  <div style={{ height: '38px', background: 'var(--border)', borderRadius: '6px', animation: 'pulse-glow 1.5s infinite' }} />
+                </div>
+              ))}
+            </div>
+
+            <div className="form-card-section" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ height: '24px', width: '50%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ height: '100px', background: 'var(--border)', borderRadius: '8px', animation: 'pulse-glow 1.5s infinite' }} />
+                <div style={{ height: '100px', background: 'var(--border)', borderRadius: '8px', animation: 'pulse-glow 1.5s infinite' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <style jsx>{`
+          @keyframes pulse-glow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.25; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -177,24 +347,10 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
-            className="btn btn-outline"
-            id="print-invoice-btn"
-            onClick={() => {
-              setActiveTab('print');
-              setTimeout(() => window.print(), 100);
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 6 2 18 2 18 9"/>
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-              <rect x="6" y="14" width="12" height="8"/>
-            </svg>
-            Print
-          </button>
-          <button
             className="btn btn-primary"
             id="download-pdf-btn"
-            onClick={() => handlePrint()}
+            onClick={handleDownloadPDF}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -445,6 +601,123 @@ export default function InvoicePage({ params }: InvoicePageProps) {
             </div>
           </section>
 
+          {/* Card 7.5: Foto Dokumen & Bersama Mobil */}
+          <section className="form-card-section" style={{ padding: '1.5rem' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
+              7.5. Foto Dokumen KTP &amp; Bersama Mobil
+            </h2>
+            
+            {/* Foto KTP */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Foto Dokumen KTP (Maksimal 2 Foto)</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  multiple 
+                  disabled={(formState.ktpPhotos || []).length >= 2}
+                  onChange={(e) => handleImageUpload(e, 'ktpPhotos')}
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)',
+                    background: 'var(--bg-hover)',
+                    border: '1px dashed var(--border)',
+                    borderRadius: '6px',
+                    padding: '0.5rem',
+                    cursor: (formState.ktpPhotos || []).length >= 2 ? 'not-allowed' : 'pointer',
+                    width: '100%'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(formState.ktpPhotos || []).map((photo, index) => (
+                    <div key={index} style={{ position: 'relative', width: '100px', height: '100px', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden', background: '#f8fafc' }}>
+                      <img src={photo} alt={`KTP ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button 
+                        type="button" 
+                        onClick={() => removeImage(index, 'ktpPhotos')}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          background: 'rgba(239, 68, 68, 0.9)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: 0,
+                          lineHeight: 1
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Foto Bersama Mobil */}
+            <div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Foto Bersama Mobil (Maksimal 2 Foto)</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  multiple 
+                  disabled={(formState.carPhotos || []).length >= 2}
+                  onChange={(e) => handleImageUpload(e, 'carPhotos')}
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: 'var(--text-secondary)',
+                    background: 'var(--bg-hover)',
+                    border: '1px dashed var(--border)',
+                    borderRadius: '6px',
+                    padding: '0.5rem',
+                    cursor: (formState.carPhotos || []).length >= 2 ? 'not-allowed' : 'pointer',
+                    width: '100%'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(formState.carPhotos || []).map((photo, index) => (
+                    <div key={index} style={{ position: 'relative', width: '100px', height: '100px', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden', background: '#f8fafc' }}>
+                      <img src={photo} alt={`Mobil ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <button 
+                        type="button" 
+                        onClick={() => removeImage(index, 'carPhotos')}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          background: 'rgba(239, 68, 68, 0.9)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '20px',
+                          height: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          padding: 0,
+                          lineHeight: 1
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Card 8: Tanda Tangan Digital */}
           <section className="form-card-section" style={{ padding: '1.5rem' }}>
             <h2 style={{ fontSize: '1rem', fontWeight: 800, borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
@@ -481,8 +754,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
       )}
 
       {/* ─── TAB 2: PRINT PREVIEW ─── */}
-      <div style={{ display: activeTab === 'print' ? 'block' : 'none' }}>
-        <InvoicePreview ref={printRef} record={record} />
+      <div style={activeTab === 'print' ? { display: 'block' } : { position: 'fixed', left: '-9999px', top: '-9999px', zIndex: -1000, width: '800px', background: '#fff' }}>
+        <InvoicePreview ref={printRef} record={record ? { ...record, formData: formState || record.formData } : null as any} />
       </div>
 
       {/* Print Specific CSS to always print preview layout cleanly */}

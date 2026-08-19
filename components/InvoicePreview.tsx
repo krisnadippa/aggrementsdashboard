@@ -199,6 +199,75 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
           </ol>
         </div>
 
+        {/* ══════════════════ ATTACHMENT PHOTOS ══════════════════ */}
+        {((f.ktpPhotos && f.ktpPhotos.length > 0) || (f.carPhotos && f.carPhotos.length > 0)) && (
+          <div className="inv-photos-section" style={{ marginTop: '1.5rem', marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
+            <h3 className="inv-col-title" style={{ borderBottom: '2px solid var(--accent)', paddingBottom: '0.25rem', marginBottom: '1.5rem', fontSize: '0.9375rem', fontWeight: 800 }}>
+              Lampiran Foto Dokumen &amp; Serah Terima
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {/* Top Block: KTP */}
+              {f.ktpPhotos && f.ktpPhotos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)', textAlign: 'center', width: '100%' }}>
+                    Foto KTP / Identitas
+                  </h4>
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
+                    {f.ktpPhotos.map((photo, i) => (
+                      <img 
+                        key={i} 
+                        src={photo} 
+                        alt={`KTP Attachment ${i+1}`} 
+                        style={{ 
+                          maxHeight: '180px', 
+                          maxWidth: '90%', 
+                          width: 'auto',
+                          height: 'auto',
+                          objectFit: 'contain', 
+                          border: '1px solid var(--border)', 
+                          borderRadius: '8px',
+                          display: 'block',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                        }} 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Block: Customer Together with Car */}
+              {f.carPhotos && f.carPhotos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)', textAlign: 'center', width: '100%' }}>
+                    Foto Bersama Mobil (Customer)
+                  </h4>
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
+                    {f.carPhotos.map((photo, i) => (
+                      <img 
+                        key={i} 
+                        src={photo} 
+                        alt={`Car Attachment ${i+1}`} 
+                        style={{ 
+                          maxHeight: '180px', 
+                          maxWidth: '90%', 
+                          width: 'auto',
+                          height: 'auto',
+                          objectFit: 'contain', 
+                          border: '1px solid var(--border)', 
+                          borderRadius: '8px',
+                          display: 'block',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                        }} 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ══════════════════ SIGNATURES ══════════════════ */}
         <div className="inv-sig-section">
           <div className="inv-sig-col">

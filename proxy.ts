@@ -18,12 +18,14 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow public access to GET (single sign contract) and POST (creation & signature updates)
+  // Allow public access to GET (single sign contract) and POST (signature/photo uploads)
   if (pathname === '/api/sign-data') {
     const id = req.nextUrl.searchParams.get('id');
     const method = req.method;
     
-    if (method === 'POST' || (method === 'GET' && id)) {
+    // GET with ID (customer sign prefill) and POST with ID (customer signature upload) are public.
+    // POST without ID (dashboard contract creation) and DELETE require active admin sessions.
+    if ((method === 'POST' && id) || (method === 'GET' && id)) {
       return NextResponse.next();
     }
   }

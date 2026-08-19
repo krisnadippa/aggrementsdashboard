@@ -957,12 +957,27 @@ body.sidebar-collapsed .sidebar-logout {
    INVOICE PREVIEW
 ═══════════════════════════════════════════════════════════ */
 .invoice-preview {
-  background: #ffffff;
+  background: #ffffff !important;
+  color: #0f172a !important;
   max-width: 840px;
   margin: 0 auto;
   padding: 3rem 1.5rem;
   font-size: 0.875rem;
   line-height: 1.5;
+  color-scheme: light !important;
+}
+
+/* Force light theme tokens inside preview regardless of application dark mode */
+.invoice-preview,
+.invoice-preview * {
+  --text-primary: #0f172a !important;
+  --text-secondary: #475569 !important;
+  --text-muted: #94a3b8 !important;
+  --border: #e2e8f0 !important;
+  --bg-hover: #f1f5f9 !important;
+  --bg-card: #ffffff !important;
+  --bg: #ffffff !important;
+  --accent-muted: #eff6ff !important;
 }
 
 .inv-header {

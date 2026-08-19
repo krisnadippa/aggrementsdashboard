@@ -7,6 +7,7 @@ import FuelIndicator from '@/components/FuelIndicator';
 import SignaturePad from '@/components/SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
 import { COMPANY_INFO, TERMS_AND_CONDITIONS } from '@/data/terms';
+import { compressImage } from '@/lib/localStorage';
 
 function formatCurrency(value: number): string {
   if (!value || isNaN(value)) return 'Rp 0';
@@ -92,6 +93,48 @@ export default function CustomerSignPage() {
     });
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'ktpPhotos' | 'carPhotos') => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const currentImages = form?.[field] || [];
+    if (currentImages.length + files.length > 2) {
+      alert('Maksimal 2 foto saja');
+      return;
+    }
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 4 * 1024 * 1024) {
+        alert('File terlalu besar. Maksimal ukuran file adalah 4MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        if (typeof reader.result === 'string') {
+          const compressed = await compressImage(reader.result);
+          setForm((prev) => {
+            if (!prev) return null;
+            const updated = [...(prev[field] || [])];
+            if (updated.length < 2) {
+              updated.push(compressed);
+            }
+            return { ...prev, [field]: updated };
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number, field: 'ktpPhotos' | 'carPhotos') => {
+    setForm((prev) => {
+      if (!prev) return null;
+      const updated = [...(prev[field] || [])];
+      updated.splice(index, 1);
+      return { ...prev, [field]: updated };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
@@ -138,18 +181,40 @@ export default function CustomerSignPage() {
 
   if (!form) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80dvh' }}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin" style={{ color: 'var(--accent)' }}>
-          <line x1="12" y1="2" x2="12" y2="6"></line>
-          <line x1="12" y1="18" x2="12" y2="22"></line>
-          <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-          <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-          <line x1="2" y1="12" x2="6" y2="12"></line>
-          <line x1="18" y1="12" x2="22" y2="12"></line>
-          <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-          <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-        </svg>
-        <p style={{ marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Memuat data perjanjian...</p>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        {/* Header Block Shimmer */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1.5rem' }}>
+          <div style={{ height: '32px', width: '240px', background: 'var(--border)', borderRadius: '6px', animation: 'pulse-glow 1.5s infinite' }} />
+          <div style={{ height: '16px', width: '180px', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+        </div>
+
+        {/* Section 1: Customer Info Shimmer */}
+        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-card)' }}>
+          <div style={{ height: '20px', width: '35%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ height: '14px', width: '70%', background: 'var(--border)', borderRadius: '3px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ height: '14px', width: '80%', background: 'var(--border)', borderRadius: '3px', animation: 'pulse-glow 1.5s infinite' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ height: '14px', width: '70%', background: 'var(--border)', borderRadius: '3px', animation: 'pulse-glow 1.5s infinite' }} />
+              <div style={{ height: '14px', width: '80%', background: 'var(--border)', borderRadius: '3px', animation: 'pulse-glow 1.5s infinite' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Vehicle Diagram Shimmer */}
+        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: 'var(--bg-card)' }}>
+          <div style={{ height: '20px', width: '40%', background: 'var(--border)', borderRadius: '4px', animation: 'pulse-glow 1.5s infinite' }} />
+          <div style={{ height: '240px', background: 'var(--border)', borderRadius: '8px', animation: 'pulse-glow 1.5s infinite' }} />
+        </div>
+
+        <style jsx>{`
+          @keyframes pulse-glow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 0.25; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -376,9 +441,66 @@ export default function CustomerSignPage() {
           </div>
         </section>
 
-        {/* Card 8: Tanda Tangan */}
+        {/* Card 8: Foto Bersama Mobil */}
         <section className="form-card-section" style={{ padding: '1.25rem' }}>
-          <h2 style={{ fontSize: '0.9375rem', fontWeight: 800, borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>8. Tanda Tangan</h2>
+          <h2 style={{ fontSize: '0.9375rem', fontWeight: 800, borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+            8. Foto Bersama Mobil (Maksimal 2 Foto)
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              disabled={(form.carPhotos || []).length >= 2}
+              onChange={(e) => handleImageUpload(e, 'carPhotos')}
+              style={{
+                fontSize: '0.8125rem',
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-hover)',
+                border: '1px dashed var(--border)',
+                borderRadius: '6px',
+                padding: '0.5rem',
+                cursor: (form.carPhotos || []).length >= 2 ? 'not-allowed' : 'pointer',
+                width: '100%'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {(form.carPhotos || []).map((photo, index) => (
+                <div key={index} style={{ position: 'relative', width: '120px', height: '120px', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden', background: '#f8fafc' }}>
+                  <img src={photo} alt={`Mobil ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <button 
+                    type="button" 
+                    onClick={() => removeImage(index, 'carPhotos')}
+                    style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      background: 'rgba(239, 68, 68, 0.9)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '20px',
+                      height: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      padding: 0,
+                      lineHeight: 1
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Card 9: Tanda Tangan */}
+        <section className="form-card-section" style={{ padding: '1.25rem' }}>
+          <h2 style={{ fontSize: '0.9375rem', fontWeight: 800, borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>9. Tanda Tangan</h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Pihak Rental</p>

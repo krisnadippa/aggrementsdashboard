@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions, getTransaction, updateTransaction } from '@/lib/localStorage';
+import { cleanupExpired, saveTransaction, getTransactions, getTransaction, updateTransaction, generateInvoiceNumber } from '@/lib/localStorage';
 import InvoiceForm from '@/components/InvoiceForm';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -22,30 +22,69 @@ export default function DashboardPage() {
     const editParam = params.get('edit');
     if (editParam) {
       setEditId(editParam);
-      const found = getTransaction(editParam);
-      if (found) {
-        setPrefillData(found.formData);
-      }
+      
+      // Fetch directly from Neon database API
+      fetch(`/api/sign-data?id=${encodeURIComponent(editParam)}`)
+        .then((res) => {
+          if (!res.ok) throw new Error('Data tidak ditemukan di database');
+          return res.json();
+        })
+        .then(({ data }) => {
+          if (data) {
+            setPrefillData(data);
+          }
+        })
+        .catch((err) => {
+          console.warn('Gagal memuat prefill dari DB, falling back to local storage:', err);
+          const found = getTransaction(editParam);
+          if (found) {
+            setPrefillData(found.formData);
+          }
+        });
     }
   }, []);
 
-  const handleFormSubmit = (data: RentalFormData) => {
-    if (editId) {
-      updateTransaction(editId, data);
-      
-      // If it's a Neon DB contract (ID length is 8), sync the changes back to Postgres DB
-      if (editId.length === 8) {
-        fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
+  const handleFormSubmit = async (data: RentalFormData) => {
+    try {
+      if (editId) {
+        // Preserving existing invoiceNumber if available in form state
+        const original = getTransaction(editId);
+        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
+
+        // Update in DB
+        await fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        }).catch((err) => console.error('Failed to sync updated contract to DB:', err));
-      }
+          body: JSON.stringify(payload),
+        });
+        updateTransaction(editId, payload);
+        setSavedId(editId);
+      } else {
+        // Generate new invoice number on client side
+        const invoiceNum = generateInvoiceNumber();
+        const payload = { ...data, invoiceNumber: invoiceNum };
 
-      setSavedId(editId);
-    } else {
-      const record = saveTransaction(data);
-      setSavedId(record.id); // Open success modal instead of direct push
+        // Create in DB
+        const res = await fetch('/api/sign-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Gagal menyimpan ke database');
+        const { id } = await res.json();
+        saveTransaction(payload, id);
+        setSavedId(id);
+      }
+    } catch (err) {
+      console.error('Failed to save to DB, falling back to local storage:', err);
+      if (editId) {
+        updateTransaction(editId, data);
+        setSavedId(editId);
+      } else {
+        const record = saveTransaction(data);
+        setSavedId(record.id);
+      }
     }
   };
 

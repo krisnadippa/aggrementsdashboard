@@ -9,9 +9,12 @@ if (!databaseUrl) {
 
 export const sql = databaseUrl ? neon(databaseUrl) : null;
 
+// Track initialization state to avoid redundant checks on every request
+let isDbInitialized = false;
+
 // Helper to initialize table if it doesn't exist
 export async function initDb() {
-  if (!sql) return;
+  if (!sql || isDbInitialized) return;
   try {
     // 1. Create rental_contracts table
     await sql`
@@ -33,7 +36,13 @@ export async function initDb() {
       );
     `;
 
-    // 3. Seed default admin if empty
+    // 3. Create index for query plan optimization
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_contracts_expiry_created 
+      ON rental_contracts (expires_at, created_at DESC);
+    `;
+
+    // 4. Seed default admin if empty
     const usersCount = await sql`SELECT count(*) FROM users`;
     const count = Number(usersCount[0]?.count || 0);
     if (count === 0) {
@@ -47,6 +56,8 @@ export async function initDb() {
       `;
       console.log(`Database initialized: Seeded default user "${seedUsername}".`);
     }
+    
+    isDbInitialized = true;
   } catch (err) {
     console.error('Failed to initialize database table:', err);
   }

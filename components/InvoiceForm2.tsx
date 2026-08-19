@@ -7,7 +7,7 @@ import VehicleConditionDiagram from './VehicleConditionDiagram';
 import FuelIndicator from './FuelIndicator';
 import SignaturePad from './SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
-import { saveTransaction } from '@/lib/localStorage';
+import { saveTransaction, compressImage } from '@/lib/localStorage';
 import { useRouter } from 'next/navigation';
 
 interface InvoiceFormProps {
@@ -81,6 +81,8 @@ const emptyForm = (): RentalFormData => ({
   checklist: DEFAULT_CHECKLIST.map((c) => ({ ...c })),
   signatureRental: '',
   signatureRenter: '',
+  ktpPhotos: [],
+  carPhotos: [],
 });
 
 const SectionIcons = {
@@ -198,6 +200,46 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
     set('damageMarkers', markers);
   }, [set]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'ktpPhotos' | 'carPhotos') => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const currentImages = form[field] || [];
+    if (currentImages.length + files.length > 2) {
+      alert('Maksimal 2 foto saja');
+      return;
+    }
+
+    Array.from(files).forEach((file) => {
+      if (file.size > 4 * 1024 * 1024) {
+        alert('File terlalu besar. Maksimal ukuran file adalah 4MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        if (typeof reader.result === 'string') {
+          const compressed = await compressImage(reader.result);
+          setForm((prev) => {
+            const updated = [...(prev[field] || [])];
+            if (updated.length < 2) {
+              updated.push(compressed);
+            }
+            return { ...prev, [field]: updated };
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number, field: 'ktpPhotos' | 'carPhotos') => {
+    setForm((prev) => {
+      const updated = [...(prev[field] || [])];
+      updated.splice(index, 1);
+      return { ...prev, [field]: updated };
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.vehicleName) { alert('Nama kendaraan wajib diisi.'); return; }
@@ -278,6 +320,59 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 <textarea id="address" className="form-input-custom form-textarea-custom" rows={4}
                   value={form.address} onChange={(e) => set('address', e.target.value)}
                   placeholder="Alamat villa, hotel, atau alamat domisili di Bali" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label-custom">FOTO DOKUMEN KTP (MAKSIMAL 2 FOTO)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    disabled={(form.ktpPhotos || []).length >= 2}
+                    onChange={(e) => handleImageUpload(e, 'ktpPhotos')}
+                    style={{
+                      fontSize: '0.8125rem',
+                      color: 'var(--text-secondary)',
+                      background: 'var(--bg-hover)',
+                      border: '1px dashed var(--border)',
+                      borderRadius: '6px',
+                      padding: '0.5rem',
+                      cursor: (form.ktpPhotos || []).length >= 2 ? 'not-allowed' : 'pointer'
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {(form.ktpPhotos || []).map((photo, index) => (
+                      <div key={index} style={{ position: 'relative', width: '100px', height: '100px', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden', background: '#f8fafc' }}>
+                        <img src={photo} alt={`KTP ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button 
+                          type="button" 
+                          onClick={() => removeImage(index, 'ktpPhotos')}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: 'rgba(239, 68, 68, 0.9)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            padding: 0,
+                            lineHeight: 1
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
