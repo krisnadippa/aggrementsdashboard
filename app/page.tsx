@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions, getTransaction, updateTransaction, generateInvoiceNumber } from '@/lib/localStorage';
+import { generateInvoiceNumber } from '@/lib/localStorage';
 import InvoiceForm from '@/components/InvoiceForm';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -13,11 +13,7 @@ export default function DashboardPage() {
   const [prefillData, setPrefillData] = useState<RentalFormData | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
 
-  // Cleanup expired entries on mount
   useEffect(() => {
-    cleanupExpired();
-    setTxnCount(getTransactions().length);
-
     const params = new URLSearchParams(window.location.search);
     const editParam = params.get('edit');
     if (editParam) {
@@ -35,11 +31,7 @@ export default function DashboardPage() {
           }
         })
         .catch((err) => {
-          console.warn('Gagal memuat prefill dari DB, falling back to local storage:', err);
-          const found = getTransaction(editParam);
-          if (found) {
-            setPrefillData(found.formData);
-          }
+          console.error('Gagal memuat prefill dari DB:', err);
         });
     }
   }, []);
@@ -47,18 +39,16 @@ export default function DashboardPage() {
   const handleFormSubmit = async (data: RentalFormData) => {
     try {
       if (editId) {
-        // Preserving existing invoiceNumber if available in form state
-        const original = getTransaction(editId);
-        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
+        const invoiceNum = data.invoiceNumber || generateInvoiceNumber();
         const payload = { ...data, invoiceNumber: invoiceNum };
 
         // Update in DB
-        await fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
+        const res = await fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        updateTransaction(editId, payload);
+        if (!res.ok) throw new Error('Gagal menyimpan ke database');
         setSavedId(editId);
       } else {
         // Generate new invoice number on client side
@@ -73,18 +63,11 @@ export default function DashboardPage() {
         });
         if (!res.ok) throw new Error('Gagal menyimpan ke database');
         const { id } = await res.json();
-        saveTransaction(payload, id);
         setSavedId(id);
       }
-    } catch (err) {
-      console.error('Failed to save to DB, falling back to local storage:', err);
-      if (editId) {
-        updateTransaction(editId, data);
-        setSavedId(editId);
-      } else {
-        const record = saveTransaction(data);
-        setSavedId(record.id);
-      }
+    } catch (err: any) {
+      console.error('Failed to save to DB:', err);
+      alert(err.message || 'Gagal menyimpan perubahan.');
     }
   };
 

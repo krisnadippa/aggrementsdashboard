@@ -63,12 +63,7 @@ export async function initDb() {
   }
 }
 
-// Helper to delete records older than 24 hours
+// Helper to delete records older than 24 hours (Disabled: keep indefinitely)
 export async function cleanupExpiredDb() {
-  if (!sql) return;
-  try {
-    await sql`DELETE FROM rental_contracts WHERE expires_at < NOW()`;
-  } catch (err) {
-    console.error('Failed to cleanup expired database records:', err);
-  }
+  // Disabled auto-cleanup
 }

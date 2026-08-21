@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TransactionRecord } from '@/types';
-import { getTransactions, cleanupExpired, deleteTransaction, updateTransaction } from '@/lib/localStorage';
 import ThemeToggle from '@/components/ThemeToggle';
 
 function formatCurrency(v: number) {
@@ -60,27 +59,8 @@ export default function HistoryPage() {
       })
       .catch((err) => {
         console.error('Error fetching history from Postgres DB:', err);
-        // Fallback to local storage if DB is down/not configured
-        const localRecords = getTransactions().sort((a, b) => b.createdAt - a.createdAt);
-        
-        // Filter locally in fallback scenario
-        const q = debouncedSearch.toLowerCase().trim();
-        const filtered = localRecords.filter((r) => {
-          if (!q) return true;
-          return (
-            r.invoiceNumber.toLowerCase().includes(q) ||
-            (r.formData.renterName || '').toLowerCase().includes(q) ||
-            (r.formData.vehicleName || '').toLowerCase().includes(q) ||
-            (r.formData.policeNumber || '').toLowerCase().includes(q)
-          );
-        });
-
-        setTotalRecords(filtered.length);
-        const sliced = filtered.slice(
-          (currentPage - 1) * itemsPerPage,
-          currentPage * itemsPerPage
-        );
-        setRecords(sliced);
+        setRecords([]);
+        setTotalRecords(0);
       })
       .finally(() => {
         setLoaded(true);
@@ -96,17 +76,18 @@ export default function HistoryPage() {
 
   const confirmDelete = () => {
     if (deleteTarget) {
-      // Also request DELETE on database contract if it's a Neon DB ID (length 8)
-      if (deleteTarget.id.length === 8) {
-        fetch(`/api/sign-data?id=${deleteTarget.id}`, {
-          method: 'DELETE',
-        }).catch((err) => console.error('Error deleting contract from Postgres DB:', err));
-      }
-      
-      deleteTransaction(deleteTarget.id);
-      setRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
-      setTotalRecords((prev) => Math.max(0, prev - 1));
-      setDeleteTarget(null);
+      fetch(`/api/sign-data?id=${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      .then((res) => {
+        if (!res.ok) throw new Error('Gagal menghapus dari database');
+        setRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+        setTotalRecords((prev) => Math.max(0, prev - 1));
+        setDeleteTarget(null);
+      })
+      .catch((err: any) => {
+        alert(err.message || 'Gagal menghapus invoice.');
+      });
     }
   };
 
@@ -144,7 +125,7 @@ export default function HistoryPage() {
             <div>
               <h1 className="page-title">Riwayat Penyewaan</h1>
               <p className="page-subtitle">
-                Menampilkan daftar invoice dan perjanjian sewa yang tersimpan di browser ini.
+                Menampilkan daftar invoice dan perjanjian sewa yang tersimpan di database.
               </p>
             </div>
             <Link href="/" className="btn btn-primary no-print" id="new-transaction-btn">
@@ -159,7 +140,7 @@ export default function HistoryPage() {
                 <line x1="12" y1="16" x2="12" y2="12"></line>
                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
               </svg>
-              <span>Data riwayat ini disimpan secara lokal di browser Anda. Hapus secara manual jika transaksi sudah tidak diperlukan.</span>
+              <span>Data riwayat ini disimpan di database. Hapus secara manual jika transaksi sudah tidak diperlukan.</span>
             </div>
           )}
         </div>

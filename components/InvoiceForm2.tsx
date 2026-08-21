@@ -7,7 +7,7 @@ import VehicleConditionDiagram from './VehicleConditionDiagram';
 import FuelIndicator from './FuelIndicator';
 import SignaturePad from './SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
-import { saveTransaction, compressImage } from '@/lib/localStorage';
+import { compressImage } from '@/lib/localStorage';
 import { useRouter } from 'next/navigation';
 
 interface InvoiceFormProps {
@@ -36,9 +36,11 @@ function parseNumberFromDots(str: string): number {
 // encodeShortData and decodeShortData are now imported from '@/lib/urlData'
 
 function calcDuration(startDate: string, startTime: string, endDate: string, endTime: string) {
-  if (!startDate || !startTime || !endDate || !endTime) return { days: 0, hours: 0 };
-  const start = new Date(`${startDate}T${startTime}`);
-  const end = new Date(`${endDate}T${endTime}`);
+  if (!startDate || !endDate) return { days: 0, hours: 0 };
+  const startT = startTime || '00:00';
+  const endT = endTime || '00:00';
+  const start = new Date(`${startDate}T${startT}`);
+  const end = new Date(`${endDate}T${endT}`);
   const diffMs = end.getTime() - start.getTime();
   if (diffMs <= 0) return { days: 0, hours: 0 };
   const totalHours = Math.ceil(diffMs / (1000 * 60 * 60));
@@ -243,7 +245,6 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.vehicleName) { alert('Nama kendaraan wajib diisi.'); return; }
-    if (!form.policeNumber) { alert('Nomor polisi wajib diisi.'); return; }
     if (!form.renterName) { alert('Nama penyewa wajib diisi.'); return; }
     if (!form.startDate || !form.endDate) { alert('Tanggal sewa wajib diisi.'); return; }
 
@@ -396,8 +397,8 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
               </div>
               <div className="form-grid-2-custom">
                 <div className="form-group">
-                  <label htmlFor="policeNumber" className="form-label-custom">NOMOR POLISI <span className="req">*</span></label>
-                  <input id="policeNumber" type="text" className="form-input-custom" required
+                  <label htmlFor="policeNumber" className="form-label-custom">NOMOR POLISI</label>
+                  <input id="policeNumber" type="text" className="form-input-custom"
                     value={form.policeNumber} onChange={(e) => set('policeNumber', e.target.value)}
                     placeholder="DK 1234 AB" />
                 </div>
@@ -423,7 +424,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 <div className="datetime-split">
                   <input type="date" className="form-input-custom-date" required
                     value={form.startDate} min={today} onChange={(e) => set('startDate', e.target.value)} />
-                  <input type="time" className="form-input-custom-time" required
+                  <input type="time" className="form-input-custom-time"
                     value={form.startTime} onChange={(e) => set('startTime', e.target.value)} />
                 </div>
               </div>
@@ -432,7 +433,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 <div className="datetime-split">
                   <input type="date" className="form-input-custom-date" required
                     value={form.endDate} min={form.startDate || today} onChange={(e) => set('endDate', e.target.value)} />
-                  <input type="time" className="form-input-custom-time" required
+                  <input type="time" className="form-input-custom-time"
                     value={form.endTime} onChange={(e) => set('endTime', e.target.value)} />
                 </div>
               </div>
@@ -691,9 +692,6 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
 
                 // Open WhatsApp sharing link in new tab
                 window.open(waUrl, '_blank');
-                 
-                // Save the invoice transaction to local browser history
-                saveTransaction(form, dbId);
                  
                 // Redirect admin directly to the list/history page
                 router.push('/history');

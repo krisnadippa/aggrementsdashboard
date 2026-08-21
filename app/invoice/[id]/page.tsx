@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, use } from 'react';
 import Link from 'next/link';
 import { useReactToPrint } from 'react-to-print';
 import { TransactionRecord, RentalFormData, DamageMarker } from '@/types';
-import { getTransaction, updateTransaction, compressImage } from '@/lib/localStorage';
+import { compressImage } from '@/lib/localStorage';
 import InvoicePreview from '@/components/InvoicePreview';
 import SignaturePad from '@/components/SignaturePad';
 import VehicleConditionDiagram from '@/components/VehicleConditionDiagram';
@@ -59,14 +59,8 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         }
       })
       .catch((err) => {
-        console.warn('Error fetching from DB, falling back to localStorage:', err);
-        const found = getTransaction(id);
-        if (found) {
-          setRecord(found);
-          setFormState(found.formData);
-        } else {
-          setRecord(null);
-        }
+        console.error('Error fetching from DB:', err);
+        setRecord(null);
       });
   }, [id]);
 
@@ -217,18 +211,13 @@ export default function InvoicePage({ params }: InvoicePageProps) {
         return res.json();
       })
       .then(() => {
-        const updatedRecord = updateTransaction(id, formState);
-        if (updatedRecord) {
-          setRecord(updatedRecord);
-        } else {
-          setRecord({
-            id: id,
-            invoiceNumber: record?.invoiceNumber || `INV-${id.toUpperCase()}`,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
-            formData: formState
-          });
-        }
+        setRecord({
+          id: id,
+          invoiceNumber: record?.invoiceNumber || `INV-${id.toUpperCase()}`,
+          createdAt: record?.createdAt || Date.now(),
+          expiresAt: record?.expiresAt || (Date.now() + 100 * 365 * 24 * 60 * 60 * 1000),
+          formData: formState
+        });
         setSaveSuccess(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
         setTimeout(() => setSaveSuccess(false), 4000);
@@ -313,7 +302,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
           <div className="empty-state-icon">🔍</div>
           <p className="empty-state-title">Invoice tidak ditemukan</p>
           <p className="empty-state-desc">
-            Invoice ini mungkin sudah kedaluwarsa (lewat 24 jam) atau dihapus secara manual.
+            Invoice ini mungkin sudah dihapus secara manual atau tautan tidak valid.
           </p>
           <Link href="/" className="btn btn-primary" id="back-to-dashboard-not-found">
             Kembali ke Dashboard
@@ -411,7 +400,7 @@ export default function InvoicePage({ params }: InvoicePageProps) {
               </svg>
               <div>
                 <p style={{ fontWeight: 800, color: 'var(--success)', fontSize: '0.875rem', margin: 0 }}>Berhasil Disimpan!</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', margin: '0.125rem 0 0' }}>Tanda tangan dan perubahan detail sewa telah diperbarui di browser ini.</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', margin: '0.125rem 0 0' }}>Tanda tangan dan perubahan detail sewa telah diperbarui di database.</p>
               </div>
             </div>
           )}

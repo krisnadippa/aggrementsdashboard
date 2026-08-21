@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RentalFormData } from '@/types';
-import { cleanupExpired, saveTransaction, getTransactions, updateTransaction, generateInvoiceNumber, getTransaction } from '@/lib/localStorage';
+import { generateInvoiceNumber } from '@/lib/localStorage';
 import InvoiceForm2 from '@/components/InvoiceForm2';
 import ThemeToggle from '@/components/ThemeToggle';
 import { decodeShortData } from '@/lib/urlData';
@@ -17,9 +17,6 @@ export default function Dashboard2Page() {
   const [refError, setRefError] = useState<string | null>(null);
 
   useEffect(() => {
-    cleanupExpired();
-    setTxnCount(getTransactions().length);
-
     // Check if URL has ?data= or ?ref= param from customer WhatsApp return link
     const params = new URLSearchParams(window.location.search);
     const dataParam = params.get('data');
@@ -51,7 +48,7 @@ export default function Dashboard2Page() {
           window.history.replaceState({}, '', '/dashboard2');
         })
         .catch((err) => {
-          setRefError(err.message || 'Tautan tidak valid atau sudah kedaluwarsa.');
+          setRefError(err.message || 'Tautan tidak valid.');
         })
         .finally(() => setRefLoading(false));
     }
@@ -60,18 +57,16 @@ export default function Dashboard2Page() {
   const handleFormSubmit = async (data: RentalFormData) => {
     try {
       if (refId) {
-        // Preserving existing invoiceNumber if available in form state
-        const original = getTransaction(refId);
-        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
+        const invoiceNum = data.invoiceNumber || generateInvoiceNumber();
         const payload = { ...data, invoiceNumber: invoiceNum };
 
         // Update in DB
-        await fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
+        const res = await fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        updateTransaction(refId, payload);
+        if (!res.ok) throw new Error('Gagal menyimpan ke database');
         setSavedId(refId);
       } else {
         // Generate new invoice number on client side
@@ -86,23 +81,11 @@ export default function Dashboard2Page() {
         });
         if (!res.ok) throw new Error('Gagal menyimpan ke database');
         const { id } = await res.json();
-        saveTransaction(payload, id);
         setSavedId(id);
       }
-    } catch (err) {
-      console.error('Failed to save to DB, falling back to local storage:', err);
-      if (refId) {
-        const original = getTransaction(refId);
-        const invoiceNum = original?.formData.invoiceNumber || data.invoiceNumber || generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
-        updateTransaction(refId, payload);
-        setSavedId(refId);
-      } else {
-        const invoiceNum = generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
-        const record = saveTransaction(payload);
-        setSavedId(record.id);
-      }
+    } catch (err: any) {
+      console.error('Failed to save to DB:', err);
+      alert(err.message || 'Gagal menyimpan perubahan.');
     }
   };
 
