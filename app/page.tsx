@@ -40,7 +40,7 @@ export default function DashboardPage() {
     try {
       if (editId) {
         const invoiceNum = data.invoiceNumber || generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
+        const payload = { ...data, invoiceNumber: invoiceNum, dashboardVersion: 'dashboard1' };
 
         // Update in DB
         const res = await fetch(`/api/sign-data?id=${encodeURIComponent(editId)}`, {
@@ -53,7 +53,7 @@ export default function DashboardPage() {
       } else {
         // Generate new invoice number on client side
         const invoiceNum = generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
+        const payload = { ...data, invoiceNumber: invoiceNum, dashboardVersion: 'dashboard1' };
 
         // Create in DB
         const res = await fetch('/api/sign-data', {

@@ -288,7 +288,7 @@ export default function HistoryPage() {
                             <Link href={`/invoice/${record.id}`} className="btn btn-sm btn-outline" style={{ height: '30px', padding: '0 0.75rem', fontSize: '0.75rem', lineHeight: '28px' }}>
                               Lihat
                             </Link>
-                            <Link href={`/?edit=${record.id}`} className="btn btn-sm btn-outline" style={{ borderColor: 'var(--accent)', color: 'var(--accent)', height: '30px', padding: '0 0.75rem', fontSize: '0.75rem', lineHeight: '28px' }}>
+                            <Link href={record.formData?.dashboardVersion === 'dashboard1' ? `/?edit=${record.id}` : `/dashboard2?edit=${record.id}`} className="btn btn-sm btn-outline" style={{ borderColor: 'var(--accent)', color: 'var(--accent)', height: '30px', padding: '0 0.75rem', fontSize: '0.75rem', lineHeight: '28px' }}>
                               Edit
                             </Link>
                             <button

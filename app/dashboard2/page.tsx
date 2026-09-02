@@ -17,10 +17,11 @@ export default function Dashboard2Page() {
   const [refError, setRefError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if URL has ?data= or ?ref= param from customer WhatsApp return link
+    // Check if URL has ?data= or ?ref= or ?edit= param
     const params = new URLSearchParams(window.location.search);
     const dataParam = params.get('data');
     const ref = params.get('ref');
+    const editParam = params.get('edit');
 
     if (dataParam) {
       const decoded = decodeShortData(dataParam);
@@ -31,10 +32,11 @@ export default function Dashboard2Page() {
       } else {
         setRefError('Tautan data tidak valid atau rusak.');
       }
-    } else if (ref) {
-      setRefId(ref);
+    } else if (ref || editParam) {
+      const targetId = (ref || editParam)!;
+      setRefId(targetId);
       setRefLoading(true);
-      fetch(`/api/sign-data?id=${encodeURIComponent(ref)}`)
+      fetch(`/api/sign-data?id=${encodeURIComponent(targetId)}`)
         .then(async (res) => {
           if (!res.ok) {
             const err = await res.json();
@@ -58,7 +60,7 @@ export default function Dashboard2Page() {
     try {
       if (refId) {
         const invoiceNum = data.invoiceNumber || generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
+        const payload = { ...data, invoiceNumber: invoiceNum, dashboardVersion: 'dashboard2' };
 
         // Update in DB
         const res = await fetch(`/api/sign-data?id=${encodeURIComponent(refId)}`, {
@@ -71,7 +73,7 @@ export default function Dashboard2Page() {
       } else {
         // Generate new invoice number on client side
         const invoiceNum = generateInvoiceNumber();
-        const payload = { ...data, invoiceNumber: invoiceNum };
+        const payload = { ...data, invoiceNumber: invoiceNum, dashboardVersion: 'dashboard2' };
 
         // Create in DB
         const res = await fetch('/api/sign-data', {

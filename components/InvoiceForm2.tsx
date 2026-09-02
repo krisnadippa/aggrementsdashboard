@@ -85,6 +85,7 @@ const emptyForm = (): RentalFormData => ({
   signatureRenter: '',
   ktpPhotos: [],
   carPhotos: [],
+  dashboardVersion: 'dashboard2',
 });
 
 const SectionIcons = {
@@ -656,7 +657,7 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 if (!form.phone) { alert('Nomor telepon WhatsApp penyewa wajib diisi untuk membagikan link.'); return; }
 
                 // Save FULL form data directly (excluding renter signature which is empty)
-                const payload = { ...form, signatureRenter: '' };
+                const payload = { ...form, signatureRenter: '', dashboardVersion: 'dashboard2' };
                 const host = window.location.origin;
                 let shareUrl = '';
                 let dbId: string | undefined = undefined;

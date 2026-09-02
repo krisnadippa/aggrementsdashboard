@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
           ktpPhotos: Array.isArray(body.ktpPhotos) ? body.ktpPhotos.slice(0, 2) : [],
           carPhotos: Array.isArray(body.carPhotos) ? body.carPhotos.slice(0, 2) : [],
           invoiceNumber: body.invoiceNumber || existingData.invoiceNumber || '',
+          dashboardVersion: body.dashboardVersion || existingData.dashboardVersion || '',
         };
       } else {
         updatedData = {
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
       ktpPhotos: Array.isArray(body.ktpPhotos) ? body.ktpPhotos.slice(0, 2) : [],
       carPhotos: Array.isArray(body.carPhotos) ? body.carPhotos.slice(0, 2) : [],
       invoiceNumber: body.invoiceNumber || '',
+      dashboardVersion: body.dashboardVersion || '',
     };
 
     let id = generateId();
@@ -250,7 +252,8 @@ export async function GET(req: NextRequest) {
               data->>'totalCharge' as total_charge,
               data->>'signatureRental' as signature_rental,
               data->>'signatureRenter' as signature_renter,
-              data->>'invoiceNumber' as invoice_number
+              data->>'invoiceNumber' as invoice_number,
+              data->>'dashboardVersion' as dashboard_version
             FROM rental_contracts 
             WHERE (
                 LOWER(data->>'renterName') LIKE ${queryTerm}
@@ -287,7 +290,8 @@ export async function GET(req: NextRequest) {
               data->>'totalCharge' as total_charge,
               data->>'signatureRental' as signature_rental,
               data->>'signatureRenter' as signature_renter,
-              data->>'invoiceNumber' as invoice_number
+              data->>'invoiceNumber' as invoice_number,
+              data->>'dashboardVersion' as dashboard_version
             FROM rental_contracts 
             ORDER BY created_at DESC
             LIMIT ${limit} OFFSET ${offset}
@@ -316,7 +320,8 @@ export async function GET(req: NextRequest) {
           totalCharge: Number(row.total_charge || 0),
           signatureRental: row.signature_rental || '',
           signatureRenter: row.signature_renter || '',
-          invoiceNumber: row.invoice_number || ''
+          invoiceNumber: row.invoice_number || '',
+          dashboardVersion: row.dashboard_version || ''
         }
       }));
       

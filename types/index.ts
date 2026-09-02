@@ -67,6 +67,7 @@ export interface RentalFormData {
 
   // Metadata
   invoiceNumber?: string;
+  dashboardVersion?: 'dashboard1' | 'dashboard2' | string;
 }
 
 // Static vehicle data

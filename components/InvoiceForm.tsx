@@ -81,6 +81,7 @@ const emptyForm = (): RentalFormData => ({
   signatureRenter: '',
   ktpPhotos: [],
   carPhotos: [],
+  dashboardVersion: 'dashboard1',
 });
 
 // Clean SVG Icons for Section Headers

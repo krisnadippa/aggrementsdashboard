@@ -96,7 +96,7 @@ export default function TransactionCard({ record, onDelete }: TransactionCardPro
         <Link href={`/invoice/${record.id}`} className="btn btn-sm btn-outline" id={`view-invoice-${record.id}`}>
           Lihat
         </Link>
-        <Link href={`/?edit=${record.id}`} className="btn btn-sm btn-outline" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} id={`edit-invoice-${record.id}`}>
+        <Link href={record.formData?.dashboardVersion === 'dashboard1' ? `/?edit=${record.id}` : `/dashboard2?edit=${record.id}`} className="btn btn-sm btn-outline" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} id={`edit-invoice-${record.id}`}>
           Edit
         </Link>
         <button
