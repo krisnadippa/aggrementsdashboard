@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { RentalFormData, DamageMarker } from '@/types';
 import { DEFAULT_CHECKLIST } from '@/data/vehicles';
 import { compressImage } from '@/lib/localStorage';
+import { useRouter } from 'next/navigation';
+import { encodeShortData } from '@/lib/urlData';
+import { formatWhatsAppNumber, isValidWhatsAppNumber } from '@/lib/phoneUtils';
 import VehicleConditionDiagram from './VehicleConditionDiagram';
 import FuelIndicator from './FuelIndicator';
 import SignaturePad from './SignaturePad';
@@ -134,6 +137,7 @@ const SectionIcons = {
 };
 
 export default function InvoiceForm({ onSubmit, prefillData }: InvoiceFormProps) {
+  const router = useRouter();
   const [form, setForm] = useState<RentalFormData>(emptyForm());
   const [today, setToday] = useState<string>('');
 
@@ -292,10 +296,13 @@ export default function InvoiceForm({ onSubmit, prefillData }: InvoiceFormProps)
               </div>
 
               <div className="form-group">
-                <label htmlFor="phone" className="form-label-custom">NOMOR TELEPON <span className="req">*</span></label>
+                <label htmlFor="phone" className="form-label-custom">NOMOR TELEPON (WHATSAPP) <span className="req">*</span></label>
                 <input id="phone" type="tel" className="form-input-custom" required
                   value={form.phone} onChange={(e) => set('phone', e.target.value)}
-                  placeholder="+62 812..." />
+                  placeholder="Contoh: +62 812... atau +61 412... (Internasional)" />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
+                  Bisa nomor Indonesia (+62 / 08..) atau nomor luar negeri (+61, +1, +44, +60, dll).
+                </span>
               </div>
 
               <div className="form-group">
@@ -626,7 +633,70 @@ export default function InvoiceForm({ onSubmit, prefillData }: InvoiceFormProps)
           </section>
 
           {/* Submission actions at bottom */}
-          <div className="form-actions-bottom no-print">
+          <div className="form-actions-bottom no-print" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <button
+              type="button"
+              className="btn btn-outline btn-lg"
+              style={{
+                width: '100%',
+                borderColor: '#25D366',
+                color: '#25D366',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem'
+              }}
+              onClick={async () => {
+                if (!form.renterName) { alert('Nama penyewa wajib diisi.'); return; }
+                if (!form.vehicleName) { alert('Nama kendaraan wajib diisi.'); return; }
+                if (!form.startDate || !form.endDate) { alert('Tanggal sewa wajib diisi.'); return; }
+                if (!form.phone) { alert('Nomor telepon WhatsApp penyewa wajib diisi untuk membagikan link.'); return; }
+
+                // Format phone number for WhatsApp (supports both Indonesia +62 and all international numbers)
+                const cleanPhone = formatWhatsAppNumber(form.phone);
+                if (!cleanPhone || !isValidWhatsAppNumber(cleanPhone)) {
+                  alert('Nomor telepon WhatsApp tidak valid. Pastikan nomor terisi dengan benar beserta kode negara (contoh: +62 untuk Indonesia atau +61, +1, +44, dll untuk nomor internasional).');
+                  return;
+                }
+
+                // Save form data directly (excluding renter signature which is empty)
+                const payload = { ...form, signatureRenter: '', dashboardVersion: 'dashboard1' };
+                const host = window.location.origin;
+                let shareUrl = '';
+
+                try {
+                  const res = await fetch('/api/sign-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                  });
+                  if (!res.ok) throw new Error('API save failed');
+                  const { id } = await res.json();
+                  shareUrl = `${host}/customer-sign?ref=${id}`;
+                } catch (err) {
+                  console.warn('API save failed, falling back to URL encoding:', err);
+                  const encodedData = encodeShortData(payload);
+                  shareUrl = `${host}/customer-sign?data=${encodedData}`;
+                }
+
+                const waText = encodeURIComponent(`Halo *${form.renterName}*,\n\nBerikut adalah tautan dokumen perjanjian sewa untuk kendaraan *${form.vehicleName}* dengan plat nomor *${form.policeNumber}*.\n\nSilakan klik tautan di bawah ini untuk memeriksa checklist kelengkapan dan menandatangani dokumen langsung dari HP Anda:\n\n${shareUrl}\n\nTerima kasih!`);
+                const waUrl = `https://wa.me/${cleanPhone}?text=${waText}`;
+
+                // Open WhatsApp sharing link in new tab
+                window.open(waUrl, '_blank');
+
+                // Redirect admin directly to the list/history page
+                router.push('/history');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                <polyline points="16 6 12 2 8 6"></polyline>
+                <line x1="12" y1="2" x2="12" y2="15"></line>
+              </svg>
+              <span>Bagikan Link TTD ke WhatsApp Penyewa</span>
+            </button>
+
             <button type="submit" className="btn btn-primary btn-lg" id="generate-invoice-bottom-btn" style={{ width: '100%' }}>
               <span>{prefillData ? 'Simpan Perubahan' : 'Simpan & Buat Invoice'}</span>
             </button>

@@ -9,6 +9,7 @@ import SignaturePad from './SignaturePad';
 import { encodeShortData, decodeShortData } from '@/lib/urlData';
 import { compressImage } from '@/lib/localStorage';
 import { useRouter } from 'next/navigation';
+import { formatWhatsAppNumber, isValidWhatsAppNumber } from '@/lib/phoneUtils';
 
 interface InvoiceFormProps {
   onSubmit: (data: RentalFormData) => void;
@@ -307,7 +308,10 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                 <label htmlFor="phone" className="form-label-custom">NOMOR TELEPON (WHATSAPP) <span className="req">*</span></label>
                 <input id="phone" type="tel" className="form-input-custom" required
                   value={form.phone} onChange={(e) => set('phone', e.target.value)}
-                  placeholder="+62 812..." />
+                  placeholder="Contoh: +62 812... atau +61 412... (Internasional)" />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', display: 'block' }}>
+                  Bisa nomor Indonesia (+62 / 08..) atau nomor luar negeri (+61, +1, +44, +60, dll).
+                </span>
               </div>
 
               <div className="form-group">
@@ -679,13 +683,11 @@ export default function InvoiceForm2({ onSubmit, prefillData }: InvoiceFormProps
                   shareUrl = `${host}/customer-sign?data=${encodedData}`;
                 }
 
-                // Clean phone number for WhatsApp
-                let cleanPhone = form.phone.replace(/\D/g, '');
-                if (cleanPhone.startsWith('0')) {
-                  cleanPhone = '62' + cleanPhone.slice(1);
-                }
-                if (!cleanPhone.startsWith('62') && cleanPhone !== '') {
-                  cleanPhone = '62' + cleanPhone;
+                // Format phone number for WhatsApp (supports both Indonesia +62 and all international numbers)
+                const cleanPhone = formatWhatsAppNumber(form.phone);
+                if (!cleanPhone || !isValidWhatsAppNumber(cleanPhone)) {
+                  alert('Nomor telepon WhatsApp tidak valid. Pastikan nomor terisi dengan benar beserta kode negara (contoh: +62 untuk Indonesia atau +61, +1, +44, dll untuk nomor internasional).');
+                  return;
                 }
 
                 const waText = encodeURIComponent(`Halo *${form.renterName}*,\n\nBerikut adalah tautan dokumen perjanjian sewa untuk kendaraan *${form.vehicleName}* dengan plat nomor *${form.policeNumber}*.\n\nSilakan klik tautan di bawah ini untuk memeriksa checklist kelengkapan dan menandatangani dokumen langsung dari HP Anda:\n\n${shareUrl}\n\nTerima kasih!`);
